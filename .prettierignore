@@ -1,0 +1,10 @@
+node_modules
+dist
+coverage
+pnpm-lock.yaml
+prisma/migrations
+KIDQUEST_TECHNICAL_SPECIFICATION.md
+frontend/public/icons/*.png
+.local
+playwright-report
+test-results

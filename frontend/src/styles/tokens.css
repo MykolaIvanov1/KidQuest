@@ -1,0 +1,52 @@
+/* Material Design 3 roles: color, typography, shape, elevation and state. */
+:root {
+  color-scheme: light;
+  --md-sys-color-primary: #29634c;
+  --md-sys-color-on-primary: #ffffff;
+  --md-sys-color-primary-container: #e2efdb;
+  --md-sys-color-on-primary-container: #174c34;
+  --md-sys-color-secondary-container: #f4eddb;
+  --md-sys-color-surface: #ffffff;
+  --md-sys-color-surface-container: #f6f8f3;
+  --md-sys-color-surface-container-high: #eef2ea;
+  --md-sys-color-on-surface: #25362d;
+  --md-sys-color-on-surface-variant: #667268;
+  --md-sys-color-outline: #737d72;
+  --md-sys-color-outline-variant: #e3e8de;
+  --md-sys-color-error: #a52c2c;
+  --md-sys-color-error-container: #fff0ec;
+  --md-sys-shape-corner-medium: 16px;
+  --md-sys-shape-corner-large: 24px;
+  --md-sys-shape-corner-full: 999px;
+  --md-sys-elevation-level1: 0 4px 20px #263d2d04;
+  --font-body: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --gold-bg: #fff4ce;
+  --gold: #86611b;
+  --purple-bg: #eee9f7;
+  --purple: #6c548f;
+  --peach-bg: #fff0e4;
+  --peach: #9b5730;
+}
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --md-sys-color-primary: #b0d5a7;
+  --md-sys-color-on-primary: #163d28;
+  --md-sys-color-primary-container: #2b4736;
+  --md-sys-color-on-primary-container: #d4efcc;
+  --md-sys-color-secondary-container: #3e3b2b;
+  --md-sys-color-surface: #1c251f;
+  --md-sys-color-surface-container: #131b16;
+  --md-sys-color-surface-container-high: #273129;
+  --md-sys-color-on-surface: #e5e9df;
+  --md-sys-color-on-surface-variant: #b1bcae;
+  --md-sys-color-outline: #899582;
+  --md-sys-color-outline-variant: #364137;
+  --md-sys-color-error: #ffb4a8;
+  --md-sys-color-error-container: #4b2524;
+  --gold-bg: #3c3521;
+  --gold: #e4c981;
+  --purple-bg: #352e43;
+  --purple: #d1b8f0;
+  --peach-bg: #433124;
+  --peach: #f2bc96;
+}

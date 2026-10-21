@@ -1,0 +1,382 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  CHILD
+  PARENT
+}
+
+enum TaskCompletionStatus {
+  PENDING
+  SUBMITTED
+  APPROVED
+  REJECTED
+  MISSED
+}
+
+enum PointTransactionType {
+  TASK_REWARD
+  BONUS
+  PENALTY
+  REWARD_PURCHASE
+  ADMIN_ADJUSTMENT
+}
+
+enum RewardType {
+  SCREEN_TIME
+  FOOD
+  TV
+  ACTIVITY
+  MATERIAL
+  OTHER
+}
+
+enum RewardRequestStatus {
+  PENDING
+  APPROVED
+  ISSUED
+  REJECTED
+}
+
+model Family {
+  id          String             @id @default(uuid()) @db.Uuid
+  name        String             @db.VarChar(120)
+  timeZone    String             @default("Europe/Kyiv") @db.VarChar(80)
+  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime           @updatedAt @db.Timestamptz(3)
+  deletedAt   DateTime?          @db.Timestamptz(3)
+  users       User[]
+  children    Child[]
+  categories  TaskCategory[]
+  tasks       Task[]
+  completions TaskCompletion[]
+  points      PointTransaction[]
+  rewards     Reward[]
+  requests    RewardRequest[]
+  auditLogs   AuditLog[]
+}
+
+model User {
+  id           String    @id @default(uuid()) @db.Uuid
+  familyId     String    @db.Uuid
+  email        String    @unique @db.VarChar(254)
+  passwordHash String    @db.VarChar(100)
+  firstName    String    @db.VarChar(80)
+  lastName     String    @default("") @db.VarChar(80)
+  role         Role
+  avatarUrl    String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt    DateTime? @db.Timestamptz(3)
+  family       Family    @relation(fields: [familyId], references: [id], onDelete: Restrict)
+
+  child               Child?
+  reviewedCompletions TaskCompletion[]   @relation("CompletionReviewer")
+  reviewedRequests    RewardRequest[]    @relation("RequestReviewer")
+  issuedRequests      RewardRequest[]    @relation("RequestIssuer")
+  createdPoints       PointTransaction[] @relation("TransactionCreator")
+  achievements        UserAchievement[]
+  notifications       Notification[]
+  loginLogs           LoginLog[]
+  auditLogs           AuditLog[]
+  refreshTokens       RefreshToken[]
+  devices             Device[]
+
+  @@unique([id, familyId])
+  @@index([familyId, role, deletedAt])
+}
+
+model Child {
+  id        String    @id @default(uuid()) @db.Uuid
+  familyId  String    @db.Uuid
+  userId    String    @unique @db.Uuid
+  firstName String    @db.VarChar(80)
+  lastName  String    @default("") @db.VarChar(80)
+  birthDate DateTime? @db.Date
+  avatarUrl String?
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  family    Family    @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  user      User      @relation(fields: [userId, familyId], references: [id, familyId], onDelete: Restrict)
+
+  completions TaskCompletion[]
+  points      PointTransaction[]
+  requests    RewardRequest[]
+
+  @@unique([id, familyId])
+  @@unique([userId, familyId])
+  @@index([familyId, deletedAt])
+}
+
+model TaskCategory {
+  id        String    @id @default(uuid()) @db.Uuid
+  familyId  String    @db.Uuid
+  name      String    @db.VarChar(80)
+  icon      String    @default("ListTodo") @db.VarChar(60)
+  color     String    @default("primary") @db.VarChar(30)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  family    Family    @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  tasks     Task[]
+
+  @@unique([id, familyId])
+  @@index([familyId, deletedAt])
+}
+
+model Task {
+  id            String           @id @default(uuid()) @db.Uuid
+  familyId      String           @db.Uuid
+  categoryId    String           @db.Uuid
+  title         String           @db.VarChar(160)
+  description   String           @default("")
+  icon          String           @default("ListTodo") @db.VarChar(60)
+  color         String           @default("primary") @db.VarChar(30)
+  points        Int
+  isRequired    Boolean          @default(false)
+  photoRequired Boolean          @default(false)
+  startTime     String?          @db.VarChar(5)
+  endTime       String?          @db.VarChar(5)
+  isActive      Boolean          @default(true)
+  createdAt     DateTime         @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime         @updatedAt @db.Timestamptz(3)
+  deletedAt     DateTime?        @db.Timestamptz(3)
+  family        Family           @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  category      TaskCategory     @relation(fields: [categoryId, familyId], references: [id, familyId], onDelete: Restrict)
+  completions   TaskCompletion[]
+
+  @@unique([id, familyId])
+  @@index([familyId, isActive, deletedAt])
+  @@index([categoryId])
+}
+
+model TaskCompletion {
+  id               String               @id @default(uuid()) @db.Uuid
+  familyId         String               @db.Uuid
+  taskId           String               @db.Uuid
+  childId          String               @db.Uuid
+  completionDate   DateTime             @db.Date
+  status           TaskCompletionStatus @default(PENDING)
+  pointsSnapshot   Int
+  operationId      String?              @unique @db.Uuid
+  submittedAt      DateTime?            @db.Timestamptz(3)
+  reviewedAt       DateTime?            @db.Timestamptz(3)
+  reviewedById     String?              @db.Uuid
+  rejectionReason  String?
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime             @updatedAt @db.Timestamptz(3)
+  deletedAt        DateTime?            @db.Timestamptz(3)
+  family           Family               @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  task             Task                 @relation(fields: [taskId, familyId], references: [id, familyId], onDelete: Restrict)
+  child            Child                @relation(fields: [childId, familyId], references: [id, familyId], onDelete: Restrict)
+  reviewedBy       User?                @relation("CompletionReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  photos           TaskPhoto[]
+  pointTransaction PointTransaction?
+
+  @@unique([id, familyId])
+  @@unique([taskId, childId, completionDate])
+  @@index([familyId, status, deletedAt])
+  @@index([childId, completionDate])
+}
+
+model TaskPhoto {
+  id           String         @id @default(uuid()) @db.Uuid
+  completionId String         @db.Uuid
+  storagePath  String
+  mimeType     String         @db.VarChar(80)
+  size         Int
+  createdAt    DateTime       @default(now()) @db.Timestamptz(3)
+  deletedAt    DateTime?      @db.Timestamptz(3)
+  completion   TaskCompletion @relation(fields: [completionId], references: [id], onDelete: Restrict)
+
+  @@index([completionId, deletedAt])
+}
+
+// Append-only: corrections are new transactions that reference reversalOfId.
+model PointTransaction {
+  id               String               @id @default(uuid()) @db.Uuid
+  familyId         String               @db.Uuid
+  childId          String               @db.Uuid
+  type             PointTransactionType
+  amount           Int
+  description      String               @default("")
+  taskCompletionId String?              @unique @db.Uuid
+  rewardRequestId  String?              @unique @db.Uuid
+  operationId      String               @unique @default(uuid()) @db.Uuid
+  reversalOfId     String?              @unique @db.Uuid
+  createdById      String?              @db.Uuid
+  createdAt        DateTime             @default(now()) @db.Timestamptz(3)
+  family           Family               @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  child            Child                @relation(fields: [childId, familyId], references: [id, familyId], onDelete: Restrict)
+  taskCompletion   TaskCompletion?      @relation(fields: [taskCompletionId, familyId], references: [id, familyId], onDelete: Restrict)
+  rewardRequest    RewardRequest?       @relation(fields: [rewardRequestId, familyId], references: [id, familyId], onDelete: Restrict)
+  createdBy        User?                @relation("TransactionCreator", fields: [createdById], references: [id], onDelete: Restrict)
+  reversalOf       PointTransaction?    @relation("PointReversal", fields: [reversalOfId], references: [id], onDelete: Restrict)
+  reversal         PointTransaction?    @relation("PointReversal")
+
+  @@unique([taskCompletionId, familyId])
+  @@unique([rewardRequestId, familyId])
+  @@index([familyId, childId, createdAt])
+}
+
+model Reward {
+  id          String          @id @default(uuid()) @db.Uuid
+  familyId    String          @db.Uuid
+  title       String          @db.VarChar(160)
+  description String          @default("")
+  icon        String          @default("Gift") @db.VarChar(60)
+  imageUrl    String?
+  cost        Int
+  type        RewardType      @default(OTHER)
+  isActive    Boolean         @default(true)
+  createdAt   DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt   DateTime        @updatedAt @db.Timestamptz(3)
+  deletedAt   DateTime?       @db.Timestamptz(3)
+  family      Family          @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  requests    RewardRequest[]
+
+  @@unique([id, familyId])
+  @@index([familyId, isActive, deletedAt])
+}
+
+model RewardRequest {
+  id               String              @id @default(uuid()) @db.Uuid
+  familyId         String              @db.Uuid
+  rewardId         String              @db.Uuid
+  childId          String              @db.Uuid
+  status           RewardRequestStatus @default(PENDING)
+  costSnapshot     Int
+  operationId      String              @unique @default(uuid()) @db.Uuid
+  reviewedById     String?             @db.Uuid
+  reviewedAt       DateTime?           @db.Timestamptz(3)
+  issuedById       String?             @db.Uuid
+  issuedAt         DateTime?           @db.Timestamptz(3)
+  rejectionReason  String?
+  createdAt        DateTime            @default(now()) @db.Timestamptz(3)
+  updatedAt        DateTime            @updatedAt @db.Timestamptz(3)
+  deletedAt        DateTime?           @db.Timestamptz(3)
+  family           Family              @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  reward           Reward              @relation(fields: [rewardId, familyId], references: [id, familyId], onDelete: Restrict)
+  child            Child               @relation(fields: [childId, familyId], references: [id, familyId], onDelete: Restrict)
+  reviewedBy       User?               @relation("RequestReviewer", fields: [reviewedById], references: [id], onDelete: Restrict)
+  issuedBy         User?               @relation("RequestIssuer", fields: [issuedById], references: [id], onDelete: Restrict)
+  pointTransaction PointTransaction?
+
+  @@unique([id, familyId])
+  @@index([familyId, status, deletedAt])
+  @@index([childId, createdAt])
+}
+
+model Achievement {
+  id            String            @id @default(uuid()) @db.Uuid
+  code          String            @unique @db.VarChar(80)
+  title         String            @db.VarChar(160)
+  description   String
+  icon          String            @default("Trophy") @db.VarChar(60)
+  configuration Json
+  isActive      Boolean           @default(true)
+  createdAt     DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime          @updatedAt @db.Timestamptz(3)
+  deletedAt     DateTime?         @db.Timestamptz(3)
+  users         UserAchievement[]
+
+  @@index([isActive, deletedAt])
+}
+
+model UserAchievement {
+  id            String      @id @default(uuid()) @db.Uuid
+  userId        String      @db.Uuid
+  achievementId String      @db.Uuid
+  earnedAt      DateTime    @default(now()) @db.Timestamptz(3)
+  user          User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  achievement   Achievement @relation(fields: [achievementId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, achievementId])
+  @@index([userId, earnedAt])
+}
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  userId    String    @db.Uuid
+  type      String    @db.VarChar(80)
+  title     String    @db.VarChar(160)
+  body      String
+  data      Json?
+  readAt    DateTime? @db.Timestamptz(3)
+  createdAt DateTime  @default(now()) @db.Timestamptz(3)
+  deletedAt DateTime? @db.Timestamptz(3)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, readAt, createdAt])
+}
+
+model LoginLog {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String?  @db.Uuid
+  loginAt   DateTime @default(now()) @db.Timestamptz(3)
+  ipAddress String?  @db.VarChar(64)
+  userAgent String?
+  device    String?
+  success   Boolean
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, loginAt])
+  @@index([success, loginAt])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  familyId   String   @db.Uuid
+  userId     String?  @db.Uuid
+  action     String   @db.VarChar(100)
+  entityType String   @db.VarChar(80)
+  entityId   String?  @db.Uuid
+  metadata   Json?
+  createdAt  DateTime @default(now()) @db.Timestamptz(3)
+  family     Family   @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  user       User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([familyId, createdAt])
+  @@index([entityType, entityId])
+}
+
+model RefreshToken {
+  id           String        @id @default(uuid()) @db.Uuid
+  userId       String        @db.Uuid
+  tokenHash    String        @unique @db.VarChar(64)
+  sessionId    String        @default(uuid()) @db.Uuid
+  expiresAt    DateTime      @db.Timestamptz(3)
+  revokedAt    DateTime?     @db.Timestamptz(3)
+  replacedById String?       @unique @db.Uuid
+  createdAt    DateTime      @default(now()) @db.Timestamptz(3)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  replacedBy   RefreshToken? @relation("TokenRotation", fields: [replacedById], references: [id], onDelete: Restrict)
+  replaces     RefreshToken? @relation("TokenRotation")
+
+  @@index([userId, revokedAt])
+  @@index([sessionId])
+  @@index([expiresAt])
+}
+
+model Device {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  token      String    @unique
+  name       String?   @db.VarChar(120)
+  platform   String?   @db.VarChar(40)
+  lastSeenAt DateTime  @default(now()) @db.Timestamptz(3)
+  createdAt  DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
+  deletedAt  DateTime? @db.Timestamptz(3)
+  user       User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, deletedAt])
+}

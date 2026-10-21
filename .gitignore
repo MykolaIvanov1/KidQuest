@@ -147,3 +147,13 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+# KidQuest local data, generated files, and test artifacts
+.local/
+storage/
+test-results/
+playwright-report/
+*.sql.gz
+backup*.sql
+*.pem
+firebase-service-account*.json
