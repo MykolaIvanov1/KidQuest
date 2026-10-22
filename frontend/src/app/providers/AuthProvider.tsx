@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { useQueryClient } from '@tanstack/react-query';
 import type { AuthSession, PublicUser } from '@kidquest/types';
 import { api, onAuthLost, refreshSession, setAccessToken } from '../../services/api';
+import { useFamilyDayRefresh } from '../../hooks/useFamilyDayRefresh';
 
 interface AuthContextValue {
   user: PublicUser | null;
@@ -10,6 +11,10 @@ interface AuthContextValue {
   logout: () => Promise<void>;
 }
 const AuthContext = createContext<AuthContextValue | null>(null);
+function FamilyDayRefresh({ userId }: { userId?: string }) {
+  useFamilyDayRefresh(userId);
+  return null;
+}
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<PublicUser | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,6 +52,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
   return (
     <AuthContext.Provider value={{ user, loading, establish, logout }}>
+      <FamilyDayRefresh userId={user?.id} />
       {children}
     </AuthContext.Provider>
   );

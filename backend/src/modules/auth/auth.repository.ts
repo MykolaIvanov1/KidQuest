@@ -2,6 +2,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import type { MemberInput, RegisterInput } from '@kidquest/validation';
 import type { DashboardData } from '@kidquest/types';
 import { AppError } from '../../errors/app-error.js';
+import { dateColumn, familyClock, taskForDayWhere } from '../tasks/task-time.js';
 import {
   publicUser,
   type AuthRepository,
@@ -192,13 +193,15 @@ export class PrismaAuthRepository implements AuthRepository {
     const selected =
       user.role === 'CHILD' ? children.find((child) => child.userId === user.id) : children[0];
     const child = selected ? { id: selected.id, firstName: selected.firstName } : null;
-    const dateString = new Intl.DateTimeFormat('en-CA', {
-      timeZone: family.timeZone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(new Date());
-    const today = new Date(`${dateString}T00:00:00.000Z`);
+    const dateString = familyClock(family.timeZone).date;
+    const today = dateColumn(dateString);
+    const todayTaskWhere: Prisma.TaskWhereInput = {
+      familyId,
+      isActive: true,
+      deletedAt: null,
+      category: { deletedAt: null },
+      ...taskForDayWhere(dateString, child?.id),
+    };
     const scoped = { familyId, ...(user.role === 'CHILD' ? { childId: user.childId! } : {}) };
     const [
       tasks,
@@ -211,7 +214,7 @@ export class PrismaAuthRepository implements AuthRepository {
       approved,
     ] = await Promise.all([
       this.db.task.findMany({
-        where: { familyId, isActive: true, deletedAt: null },
+        where: todayTaskWhere,
         orderBy: { createdAt: 'asc' },
         take: 12,
         include: { category: true },
@@ -221,7 +224,7 @@ export class PrismaAuthRepository implements AuthRepository {
         orderBy: { cost: 'asc' },
         take: 8,
       }),
-      this.db.task.count({ where: { familyId, isActive: true, deletedAt: null } }),
+      this.db.task.count({ where: todayTaskWhere }),
       this.db.reward.count({ where: { familyId, isActive: true, deletedAt: null } }),
       this.db.taskCompletion.count({
         where: {
@@ -255,7 +258,7 @@ export class PrismaAuthRepository implements AuthRepository {
               completionDate: today,
               status: 'APPROVED',
               deletedAt: null,
-              task: { deletedAt: null, isActive: true },
+              task: todayTaskWhere,
             },
           })
         : Promise.resolve(0),

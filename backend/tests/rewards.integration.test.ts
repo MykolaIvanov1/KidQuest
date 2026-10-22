@@ -218,6 +218,64 @@ describe.skipIf(!db)('Reward and point workflows through HTTP on PostgreSQL', ()
     expect((await f.get('/points')).body.data.balance).toBe(0);
   });
 
+  it('keeps a charged reward available until its approved request is issued', async () => {
+    const f = await fixture(100);
+    const reward = await f.reward(30);
+    const pending = await f.ask(reward.id);
+    await f.post(`/reward-requests/${pending.id}/approve`).send({}).expect(200);
+    const remove = () =>
+      request(f.app)
+        .delete(`/api/v1/rewards/${reward.id}`)
+        .set('Origin', config.frontendUrl)
+        .auth(f.parentToken, { type: 'bearer' });
+    const blocked = await remove().expect(409);
+    expect(blocked.body.error).toMatchObject({
+      code: 'REWARD_AWAITING_ISSUE',
+      message: 'Спочатку видайте вже підтверджені нагороди.',
+    });
+    expect((await db!.reward.findUniqueOrThrow({ where: { id: reward.id } })).deletedAt).toBeNull();
+    expect((await f.get('/reward-requests').expect(200)).body.data[0].id).toBe(pending.id);
+    expect((await f.get('/points').expect(200)).body.data.balance).toBe(70);
+    await f.post(`/reward-requests/${pending.id}/issue`).send({}).expect(200);
+    await remove().expect(200);
+    expect(
+      (await db!.reward.findUniqueOrThrow({ where: { id: reward.id } })).deletedAt,
+    ).not.toBeNull();
+    expect((await f.get('/points').expect(200)).body.data.balance).toBe(70);
+  });
+
+  it('serializes reward deletion against approval without hiding a charged request', async () => {
+    const f = await fixture(100);
+    const reward = await f.reward(30);
+    const pending = await f.ask(reward.id);
+    const [approval, deletion] = await Promise.all([
+      f.post(`/reward-requests/${pending.id}/approve`).send({}),
+      request(f.app)
+        .delete(`/api/v1/rewards/${reward.id}`)
+        .set('Origin', config.frontendUrl)
+        .auth(f.parentToken, { type: 'bearer' }),
+    ]);
+    const finalReward = await db!.reward.findUniqueOrThrow({ where: { id: reward.id } });
+    const finalRequest = await db!.rewardRequest.findUniqueOrThrow({ where: { id: pending.id } });
+    const charges = await db!.pointTransaction.count({ where: { rewardRequestId: pending.id } });
+    if (finalReward.deletedAt) {
+      expect(deletion.status).toBe(200);
+      expect(approval.status).toBe(404);
+      expect(finalRequest.status).toBe('PENDING');
+      expect(charges).toBe(0);
+      expect((await f.get('/points').expect(200)).body.data.balance).toBe(100);
+    } else {
+      expect(approval.status).toBe(200);
+      expect(deletion.status).toBe(409);
+      expect(deletion.body.error.code).toBe('REWARD_AWAITING_ISSUE');
+      expect(finalRequest.status).toBe('APPROVED');
+      expect(charges).toBe(1);
+      expect((await f.get('/reward-requests').expect(200)).body.data[0].id).toBe(pending.id);
+      await f.post(`/reward-requests/${pending.id}/issue`).send({}).expect(200);
+      expect((await f.get('/points').expect(200)).body.data.balance).toBe(70);
+    }
+  });
+
   it('serializes concurrent approvals and prevents overspending across different requests', async () => {
     const f = await fixture(100);
     const reward = await f.reward(60);

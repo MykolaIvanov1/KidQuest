@@ -50,6 +50,13 @@ export class RewardsService {
       if (!(await repository.find(user.familyId, id))) {
         throw new AppError(404, 'REWARD_NOT_FOUND', 'Нагороду не знайдено.');
       }
+      if (await repository.hasApprovedRequest(user.familyId, id)) {
+        throw new AppError(
+          409,
+          'REWARD_AWAITING_ISSUE',
+          'Спочатку видайте вже підтверджені нагороди.',
+        );
+      }
       await repository.softDelete(id);
       await repository.audit(user.familyId, user.id, 'REWARD_DELETED', id);
       return { id };

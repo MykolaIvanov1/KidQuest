@@ -34,7 +34,10 @@ export function TaskEditor({ task, close }: { task?: TaskDto; close: () => void 
           color: task.color,
           points: task.points,
           isRequired: task.isRequired,
+          repeatDaily: task.repeatDaily ?? true,
           photoRequired: task.photoRequired,
+          startDate: task.startDate ?? null,
+          endDate: task.endDate ?? null,
           startTime: task.startTime,
           endTime: task.endTime,
           isActive: task.isActive,
@@ -47,7 +50,10 @@ export function TaskEditor({ task, close }: { task?: TaskDto; close: () => void 
           color: 'primary',
           points: 10,
           isRequired: true,
+          repeatDaily: true,
           photoRequired: false,
+          startDate: null,
+          endDate: null,
           startTime: null,
           endTime: null,
           isActive: true,
@@ -104,6 +110,21 @@ export function TaskEditor({ task, close }: { task?: TaskDto; close: () => void 
             </Field>
           </div>
           <div className="form-row">
+            <Field label={uk.startDate} error={errors.startDate?.message}>
+              <input
+                type="date"
+                {...register('startDate', { setValueAs: (value: string) => value || null })}
+              />
+            </Field>
+            <Field label={uk.endDate} error={errors.endDate?.message}>
+              <input
+                type="date"
+                {...register('endDate', { setValueAs: (value: string) => value || null })}
+              />
+            </Field>
+          </div>
+          <p className="field-hint">{uk.dateRangeHint}</p>
+          <div className="form-row">
             <Field label={uk.startTime} error={errors.startTime?.message}>
               <input
                 type="time"
@@ -119,6 +140,14 @@ export function TaskEditor({ task, close }: { task?: TaskDto; close: () => void 
           </div>
           <div className="checkbox-grid">
             <label>
+              <input
+                type="checkbox"
+                aria-describedby="task-repeat-hint"
+                {...register('repeatDaily')}
+              />
+              {uk.repeatDaily}
+            </label>
+            <label>
               <input type="checkbox" {...register('isRequired')} />
               {uk.requiredTask}
             </label>
@@ -131,6 +160,9 @@ export function TaskEditor({ task, close }: { task?: TaskDto; close: () => void 
               {uk.active}
             </label>
           </div>
+          <p id="task-repeat-hint" className="field-hint">
+            {uk.repeatDailyHint}
+          </p>
           <Feedback error={mutation.error} />
           <div className="workflow-actions">
             <button className="button primary">{mutation.isPending ? uk.wait : uk.save}</button>

@@ -5,7 +5,7 @@ import type { UserRecord } from '../auth/auth.types.js';
 import { AppError } from '../../errors/app-error.js';
 import { withTransaction } from '../../database/transaction.js';
 import { completionDto, completionInclude } from '../task-completions/completion.repository.js';
-import { dateColumn, familyClock } from './task-time.js';
+import { dateColumn, dateOnly, familyClock, taskForDayWhere } from './task-time.js';
 
 type TaskRecord = Prisma.TaskGetPayload<{ include: { category: true } }>;
 const missingTask = () => new AppError(404, 'TASK_NOT_FOUND', 'Квест не знайдено.');
@@ -26,7 +26,10 @@ function taskDto(task: TaskRecord): TaskDto {
     color: task.color,
     points: task.points,
     isRequired: task.isRequired,
+    repeatDaily: task.repeatDaily,
     photoRequired: task.photoRequired,
+    startDate: dateOnly(task.startDate),
+    endDate: dateOnly(task.endDate),
     startTime: task.startTime,
     endTime: task.endTime,
     isActive: task.isActive,
@@ -65,30 +68,41 @@ export class TaskRepository {
   }
 
   async list(user: UserRecord) {
+    const family =
+      user.role === 'CHILD'
+        ? await this.db.family.findUniqueOrThrow({ where: { id: user.familyId } })
+        : null;
+    const today = family ? familyClock(family.timeZone).date : null;
     const tasks = await this.db.task.findMany({
       where: {
         familyId: user.familyId,
         deletedAt: null,
-        ...(user.role === 'CHILD' ? { isActive: true } : {}),
+        ...(today ? { isActive: true, ...taskForDayWhere(today, user.childId!) } : {}),
         category: { deletedAt: null },
       },
       include: { category: true },
       orderBy: { createdAt: 'asc' },
     });
     const data = tasks.map(taskDto);
-    if (user.role === 'CHILD') {
-      const family = await this.db.family.findUniqueOrThrow({ where: { id: user.familyId } });
+    if (today) {
       const completions = await this.db.taskCompletion.findMany({
         where: {
           familyId: user.familyId,
           childId: user.childId!,
-          completionDate: dateColumn(familyClock(family.timeZone).date),
+          taskId: { in: tasks.map((task) => task.id) },
+          OR: [{ completionDate: dateColumn(today) }, { task: { repeatDaily: false } }],
           deletedAt: null,
         },
         include: completionInclude,
+        orderBy: { completionDate: 'desc' },
       });
       for (const task of data) {
-        const completion = completions.find((entry) => entry.taskId === task.id);
+        const entries = completions.filter((entry) => entry.taskId === task.id);
+        const completion = task.repeatDaily
+          ? entries[0]
+          : (entries.find((entry) => entry.status === 'APPROVED') ??
+            entries.find((entry) => entry.status === 'SUBMITTED') ??
+            entries[0]);
         if (completion) task.todayCompletion = completionDto(completion);
       }
     }
@@ -98,8 +112,14 @@ export class TaskRepository {
   async create(user: UserRecord, input: TaskInput) {
     return withTransaction(this.db, async (tx) => {
       await this.category(tx, user.familyId, input.categoryId);
+      const { startDate, endDate, ...fields } = input;
       const task = await tx.task.create({
-        data: { ...input, familyId: user.familyId },
+        data: {
+          ...fields,
+          startDate: startDate ? dateColumn(startDate) : null,
+          endDate: endDate ? dateColumn(endDate) : null,
+          familyId: user.familyId,
+        },
         include: { category: true },
       });
       await tx.auditLog.create({
@@ -130,9 +150,27 @@ export class TaskRepository {
           'INVALID_TIME_RANGE',
           'Час завершення має бути пізнішим за час початку.',
         );
+      const { startDate, endDate, ...fields } = input;
+      const mergedStart = startDate === undefined ? dateOnly(current.startDate) : startDate;
+      const mergedEnd = endDate === undefined ? dateOnly(current.endDate) : endDate;
+      if (mergedStart && mergedEnd && mergedStart > mergedEnd) {
+        throw new AppError(
+          400,
+          'INVALID_DATE_RANGE',
+          'Дата завершення має бути не раніше дати початку.',
+        );
+      }
       const task = await tx.task.update({
         where: { id },
-        data: input,
+        data: {
+          ...fields,
+          ...(startDate === undefined
+            ? {}
+            : { startDate: startDate === null ? null : dateColumn(startDate) }),
+          ...(endDate === undefined
+            ? {}
+            : { endDate: endDate === null ? null : dateColumn(endDate) }),
+        },
         include: { category: true },
       });
       await tx.auditLog.create({

@@ -1,10 +1,11 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import type { CompletionDto } from '@kidquest/types';
+import type { CompletionReviewInput } from '@kidquest/validation';
 import type { UserRecord } from '../auth/auth.types.js';
 import { AppError } from '../../errors/app-error.js';
 import { lockChild, withTransaction } from '../../database/transaction.js';
 import { logger } from '../../utils/logger.js';
-import { dateColumn, familyClock } from '../tasks/task-time.js';
+import { dateColumn, dateOnly, familyClock, taskWithinDates } from '../tasks/task-time.js';
 import { PhotoStorage } from '../task-photos/photo.service.js';
 import { completionDto, completionInclude } from './completion.repository.js';
 
@@ -71,6 +72,13 @@ export class CompletionService {
         if (!task.isActive) throw new AppError(409, 'TASK_INACTIVE', 'Цей квест зараз неактивний.');
         const family = await tx.family.findUniqueOrThrow({ where: { id: user.familyId } });
         const clock = familyClock(family.timeZone);
+        if (!taskWithinDates(task, clock.date)) {
+          throw new AppError(
+            409,
+            'TASK_OUTSIDE_DATES',
+            'Виконання можна надіслати лише в межах дат квесту.',
+          );
+        }
         if (
           (task.startTime && clock.time < task.startTime) ||
           (task.endTime && clock.time > task.endTime)
@@ -83,14 +91,42 @@ export class CompletionService {
         if (task.photoRequired && !stored.length)
           throw new AppError(400, 'PHOTO_REQUIRED', 'Додайте фотографію виконаного квесту.');
         const completionDate = dateColumn(clock.date);
-        const existing = await tx.taskCompletion.findUnique({
+        let existing = await tx.taskCompletion.findUnique({
           where: {
             taskId_childId_completionDate: { taskId, childId: user.childId!, completionDate },
           },
         });
+        if (!task.repeatDaily) {
+          const completedOrWaiting = await tx.taskCompletion.findFirst({
+            where: {
+              familyId: user.familyId,
+              taskId,
+              childId: user.childId!,
+              deletedAt: null,
+              status: { in: ['SUBMITTED', 'APPROVED'] },
+            },
+          });
+          if (completedOrWaiting)
+            throw new AppError(
+              409,
+              'ALREADY_SUBMITTED',
+              'Цей квест без повторення вже виконано або надіслано на перевірку.',
+            );
+          existing ??= await tx.taskCompletion.findFirst({
+            where: {
+              familyId: user.familyId,
+              taskId,
+              childId: user.childId!,
+              deletedAt: null,
+              status: { in: ['PENDING', 'REJECTED'] },
+            },
+            orderBy: { completionDate: 'desc' },
+          });
+        }
         if (existing && (existing.deletedAt || !['PENDING', 'REJECTED'].includes(existing.status)))
           throw new AppError(409, 'ALREADY_SUBMITTED', 'Цей квест уже надіслано сьогодні.');
         const data = {
+          completionDate,
           status: 'SUBMITTED' as const,
           operationId,
           submittedAt: new Date(),
@@ -107,7 +143,6 @@ export class CompletionService {
                 familyId: user.familyId,
                 childId: user.childId!,
                 taskId,
-                completionDate,
               },
             });
         // Earlier photos remain on disk for audit but are hidden after a resubmission.
@@ -131,6 +166,7 @@ export class CompletionService {
               operationId,
               previousStatus: existing?.status ?? 'PENDING',
               previousRejectionReason: existing?.rejectionReason ?? null,
+              previousCompletionDate: existing ? dateOnly(existing.completionDate) : null,
             },
           },
         });
@@ -184,7 +220,7 @@ export class CompletionService {
     user: UserRecord,
     completionId: string,
     decision: 'APPROVED' | 'REJECTED',
-    reason?: string,
+    input: CompletionReviewInput,
   ) {
     const result = await withTransaction(this.db, async (tx) => {
       const initial = await tx.taskCompletion.findFirst({
@@ -208,6 +244,13 @@ export class CompletionService {
         include: completionInclude,
       });
       if (!completion) throw unavailable();
+      if (completion.operationId !== input.operationId) {
+        throw new AppError(
+          409,
+          'SUBMISSION_CHANGED',
+          'Дитина надіслала нове виконання. Оновіть список і перевірте його ще раз.',
+        );
+      }
       if (completion.status === decision) return completionDto(completion);
       if (completion.status !== 'SUBMITTED')
         throw new AppError(
@@ -221,7 +264,7 @@ export class CompletionService {
           status: decision,
           reviewedById: user.id,
           reviewedAt: new Date(),
-          rejectionReason: decision === 'REJECTED' ? (reason ?? null) : null,
+          rejectionReason: decision === 'REJECTED' ? (input.reason ?? null) : null,
         },
       });
       if (decision === 'APPROVED') {
@@ -245,7 +288,7 @@ export class CompletionService {
           entityType: 'TaskCompletion',
           entityId: completionId,
           metadata: {
-            reason: decision === 'REJECTED' ? (reason ?? null) : null,
+            reason: decision === 'REJECTED' ? (input.reason ?? null) : null,
             points: decision === 'APPROVED' ? completion.pointsSnapshot : 0,
           },
         },

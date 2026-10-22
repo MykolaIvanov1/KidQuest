@@ -44,6 +44,10 @@ export default defineConfig({
     },
   },
   envDir: fileURLToPath(new URL('..', import.meta.url)),
-  server: { port: 5173, strictPort: true, proxy: { '/api': process.env.KIDQUEST_API_PROXY || 'http://localhost:4000' } },
+  server: {
+    port: 5173,
+    strictPort: true,
+    proxy: { '/api': process.env.KIDQUEST_API_PROXY || 'http://localhost:4000' },
+  },
   test: { environment: 'jsdom', setupFiles: ['./src/test/setup.ts'], css: false },
 });

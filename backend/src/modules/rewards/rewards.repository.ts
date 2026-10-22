@@ -30,6 +30,14 @@ export class RewardsRepository {
     });
   }
 
+  async hasApprovedRequest(familyId: string, rewardId: string) {
+    const request = await this.db.rewardRequest.findFirst({
+      where: { familyId, rewardId, status: 'APPROVED' },
+      select: { id: true },
+    });
+    return request !== null;
+  }
+
   audit(familyId: string, userId: string, action: string, entityId: string) {
     return this.db.auditLog.create({
       data: { familyId, userId, action, entityId, entityType: 'Reward' },

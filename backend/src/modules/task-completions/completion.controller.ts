@@ -2,7 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 import type { CompletionRepository } from './completion.repository.js';
 import type { CompletionService } from './completion.service.js';
-import { completionFilters, reviewSchema } from './completion.validation.js';
+import { completionFilters, completionReviewSchema } from './completion.validation.js';
 
 export class CompletionController {
   constructor(
@@ -16,21 +16,26 @@ export class CompletionController {
     });
   };
   approve = async (req: Request, res: Response) => {
-    reviewSchema.parse(req.body ?? {});
+    const input = completionReviewSchema.parse(req.body ?? {});
     res.json({
       success: true,
-      data: await this.service.review(req.authUser!, z.uuid().parse(req.params.id), 'APPROVED'),
+      data: await this.service.review(
+        req.authUser!,
+        z.uuid().parse(req.params.id),
+        'APPROVED',
+        input,
+      ),
     });
   };
   reject = async (req: Request, res: Response) => {
-    const input = reviewSchema.parse(req.body ?? {});
+    const input = completionReviewSchema.parse(req.body ?? {});
     res.json({
       success: true,
       data: await this.service.review(
         req.authUser!,
         z.uuid().parse(req.params.id),
         'REJECTED',
-        input.reason,
+        input,
       ),
     });
   };

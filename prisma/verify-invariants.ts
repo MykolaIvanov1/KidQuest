@@ -118,7 +118,23 @@ async function main(): Promise<void> {
       await transaction.taskCompletion.create({ data });
       await transaction.taskCompletion.create({ data });
     });
-    console.info('5 database invariant checks passed; all fixtures rolled back.');
+    await rejects('Task rejects reversed calendar date bounds', '23514', async (transaction) => {
+      const { family } = await profile(transaction);
+      const category = await transaction.taskCategory.create({
+        data: { familyId: family.id, name: 'Date range tests' },
+      });
+      await transaction.task.create({
+        data: {
+          familyId: family.id,
+          categoryId: category.id,
+          title: 'Reversed date range',
+          points: 10,
+          startDate: new Date('2026-11-01T00:00:00.000Z'),
+          endDate: new Date('2026-10-31T00:00:00.000Z'),
+        },
+      });
+    });
+    console.info('6 database invariant checks passed; all fixtures rolled back.');
   } finally {
     await prisma.$disconnect();
   }

@@ -27,8 +27,8 @@ export default function RewardsPage() {
     enabled: !parent,
   });
   const requests = useQuery({
-    queryKey: ['reward-requests'],
-    queryFn: () => api<RewardRequestDto[]>('/reward-requests'),
+    queryKey: ['reward-requests', 'active'],
+    queryFn: () => api<RewardRequestDto[]>('/reward-requests?status=PENDING,APPROVED'),
     enabled: !parent,
   });
   const refresh = useRefreshFamilyData();
@@ -68,6 +68,9 @@ export default function RewardsPage() {
       {!parent && (
         <QueryState pending={points.isPending} error={points.error} retry={points.refetch} />
       )}
+      {!parent && (
+        <QueryState pending={requests.isPending} error={requests.error} retry={requests.refetch} />
+      )}
       {query.data && !query.data.length && (
         <div className="empty-state panel">
           <span className="empty-art gift-art">
@@ -84,6 +87,7 @@ export default function RewardsPage() {
             reward={reward}
             parent={parent}
             balance={points.data?.balance}
+            requestReady={parent || (points.isSuccess && requests.isSuccess)}
             pending={
               requests.data?.some(
                 (request) =>
@@ -108,6 +112,7 @@ function RewardCard({
   parent,
   balance,
   pending,
+  requestReady,
   edit,
   remove,
 }: {
@@ -115,6 +120,7 @@ function RewardCard({
   parent: boolean;
   balance?: number;
   pending: boolean;
+  requestReady: boolean;
   edit: () => void;
   remove: React.ReactNode;
 }) {
@@ -169,16 +175,18 @@ function RewardCard({
           />
           <button
             className="button primary"
-            disabled={!online || mutation.isPending || !affordable || pending}
+            disabled={!online || mutation.isPending || !requestReady || !affordable || pending}
             onClick={() => mutation.mutate()}
           >
             {mutation.isPending
               ? uk.wait
-              : pending
-                ? uk.rewardStates.PENDING
-                : !affordable
-                  ? uk.insufficientPoints
-                  : uk.requestReward}
+              : !requestReady
+                ? uk.loading
+                : pending
+                  ? uk.rewardStates.PENDING
+                  : !affordable
+                    ? uk.insufficientPoints
+                    : uk.requestReward}
           </button>
         </>
       )}

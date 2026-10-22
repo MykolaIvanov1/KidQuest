@@ -51,6 +51,10 @@ const timeSchema = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'Вкажіть час у форматі ГГ:ХХ')
   .nullable();
+const taskDateSchema = z.iso
+  .date('Вкажіть коректну дату у форматі РРРР-ММ-ДД')
+  .refine((value) => !value.startsWith('0000-'), 'Рік має бути від 0001 до 9999')
+  .nullable();
 const taskFields = z
   .object({
     title: titleSchema,
@@ -64,7 +68,10 @@ const taskFields = z
       .min(1, 'Щонайменше 1 бал')
       .max(100000, 'Максимум 100000 балів'),
     isRequired: z.boolean(),
+    repeatDaily: z.boolean().optional(),
     photoRequired: z.boolean(),
+    startDate: taskDateSchema.optional(),
+    endDate: taskDateSchema.optional(),
     startTime: timeSchema,
     endTime: timeSchema,
     isActive: z.boolean(),
@@ -73,16 +80,28 @@ const taskFields = z
 function validPeriod(value: { startTime?: string | null; endTime?: string | null }) {
   return !value.startTime || !value.endTime || value.startTime < value.endTime;
 }
-export const taskSchema = taskFields.refine(validPeriod, {
-  message: 'Час завершення має бути пізнішим за час початку',
-  path: ['endTime'],
-});
+function validDatePeriod(value: { startDate?: string | null; endDate?: string | null }) {
+  return !value.startDate || !value.endDate || value.startDate <= value.endDate;
+}
+export const taskSchema = taskFields
+  .refine(validPeriod, {
+    message: 'Час завершення має бути пізнішим за час початку',
+    path: ['endTime'],
+  })
+  .refine(validDatePeriod, {
+    message: 'Дата завершення має бути не раніше дати початку',
+    path: ['endDate'],
+  });
 export const taskUpdateSchema = taskFields
   .partial()
   .refine((value) => Object.keys(value).length > 0, 'Вкажіть зміни')
   .refine(validPeriod, {
     message: 'Час завершення має бути пізнішим за час початку',
     path: ['endTime'],
+  })
+  .refine(validDatePeriod, {
+    message: 'Дата завершення має бути не раніше дати початку',
+    path: ['endDate'],
   });
 export const categorySchema = z
   .object({
@@ -95,6 +114,7 @@ export const submitTaskSchema = z.object({ operationId: idSchema }).strict();
 export const reviewSchema = z
   .object({ reason: z.string().trim().max(1000, 'Максимум 1000 символів').optional() })
   .strict();
+export const completionReviewSchema = reviewSchema.extend({ operationId: idSchema }).strict();
 export const rewardTypes = ['SCREEN_TIME', 'FOOD', 'TV', 'ACTIVITY', 'MATERIAL', 'OTHER'] as const;
 const rewardFields = z
   .object({
@@ -124,6 +144,7 @@ export type TaskUpdateInput = z.infer<typeof taskUpdateSchema>;
 export type CategoryInput = z.infer<typeof categorySchema>;
 export type SubmitTaskInput = z.infer<typeof submitTaskSchema>;
 export type ReviewInput = z.infer<typeof reviewSchema>;
+export type CompletionReviewInput = z.infer<typeof completionReviewSchema>;
 export type RewardInput = z.infer<typeof rewardSchema>;
 export type RewardUpdateInput = z.infer<typeof rewardUpdateSchema>;
 export type RewardRequestInput = z.infer<typeof rewardRequestSchema>;

@@ -1,4 +1,4 @@
-import type { Prisma, PrismaClient } from '@prisma/client';
+import type { Prisma, PrismaClient, RewardRequestStatus } from '@prisma/client';
 import { requestInclude } from './reward-requests.types.js';
 
 const visibleRelations = {
@@ -21,9 +21,14 @@ export class RewardRequestRepository {
     return this.db.rewardRequest.findUnique({ where: { operationId }, include: requestInclude });
   }
 
-  list(familyId: string, childId?: string) {
+  list(familyId: string, childId?: string, statuses?: RewardRequestStatus[]) {
     return this.db.rewardRequest.findMany({
-      where: { ...visibleRelations, familyId, ...(childId ? { childId } : {}) },
+      where: {
+        ...visibleRelations,
+        familyId,
+        ...(childId ? { childId } : {}),
+        ...(statuses ? { status: { in: statuses } } : {}),
+      },
       include: requestInclude,
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: 100,

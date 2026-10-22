@@ -6,18 +6,16 @@ import multer from 'multer';
 
 export const errorHandler: ErrorRequestHandler = (error: unknown, _req, res, _next) => {
   if (error instanceof multer.MulterError) {
-    res
-      .status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400)
-      .json({
-        success: false,
-        error: {
-          code: error.code,
-          message:
-            error.code === 'LIMIT_FILE_SIZE'
-              ? 'Кожне фото має бути не більшим за 5 МБ.'
-              : 'Додайте не більше 5 фото та перевірте формат запиту.',
-        },
-      });
+    res.status(error.code === 'LIMIT_FILE_SIZE' ? 413 : 400).json({
+      success: false,
+      error: {
+        code: error.code,
+        message:
+          error.code === 'LIMIT_FILE_SIZE'
+            ? 'Кожне фото має бути не більшим за 5 МБ.'
+            : 'Додайте не більше 5 фото та перевірте формат запиту.',
+      },
+    });
     return;
   }
   if (error instanceof ZodError) {

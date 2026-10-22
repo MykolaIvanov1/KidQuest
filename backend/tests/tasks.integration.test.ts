@@ -223,7 +223,7 @@ describe.skipIf(!database)('Tasks, submissions, reviews and private photos on Po
       .post(`/api/v1/task-completions/${id}/approve`)
       .auth(childToken, { type: 'bearer' })
       .set('Origin', config.frontendUrl)
-      .send({})
+      .send({ operationId })
       .expect(403);
     const approvals = await Promise.all(
       [1, 2].map(() =>
@@ -231,7 +231,7 @@ describe.skipIf(!database)('Tasks, submissions, reviews and private photos on Po
           .post(`/api/v1/task-completions/${id}/approve`)
           .auth(parentToken, { type: 'bearer' })
           .set('Origin', config.frontendUrl)
-          .send({}),
+          .send({ operationId }),
       ),
     );
     expect(approvals.map((result) => result.status)).toEqual([200, 200]);
@@ -297,7 +297,7 @@ describe.skipIf(!database)('Tasks, submissions, reviews and private photos on Po
       .post(`/api/v1/task-completions/${id}/reject`)
       .auth(parentToken, { type: 'bearer' })
       .set('Origin', config.frontendUrl)
-      .send({ reason: 'Склади ковдру рівніше' })
+      .send({ operationId, reason: 'Склади ковдру рівніше' })
       .expect(200);
     expect(await database!.pointTransaction.count({ where: { childId: child.childId! } })).toBe(0);
     const replay = await request(app)
@@ -324,14 +324,117 @@ describe.skipIf(!database)('Tasks, submissions, reviews and private photos on Po
       .post(`/api/v1/task-completions/${id}/approve`)
       .auth(parentToken, { type: 'bearer' })
       .set('Origin', config.frontendUrl)
-      .send({})
+      .send({ operationId: corrected.body.data.operationId })
       .expect(200);
     await request(app)
       .post(`/api/v1/task-completions/${id}/reject`)
       .auth(parentToken, { type: 'bearer' })
       .set('Origin', config.frontendUrl)
-      .send({ reason: 'Пізно' })
+      .send({ operationId: corrected.body.data.operationId, reason: 'Пізно' })
       .expect(409);
+  });
+
+  it('guards corrected submissions from stale decisions by either parent and preserves same-version idempotency', async () => {
+    const { app, parent, child, parentToken, childToken, makeTask } = await fixture();
+    const secondParent = await new PrismaAuthRepository(database!).createMember(
+      parent.familyId,
+      {
+        email: `${randomUUID()}@tasks.test`,
+        password: 'not-used-for-login',
+        firstName: 'Тато',
+        role: 'PARENT',
+      },
+      'unused-test-hash',
+    );
+    const secondParentToken = sign(secondParent.id);
+    const task = await makeTask();
+    const originalOperationId = randomUUID();
+    const submitted = await request(app)
+      .post(`/api/v1/tasks/${task.id}/submit`)
+      .auth(childToken, { type: 'bearer' })
+      .set('Origin', config.frontendUrl)
+      .send({ operationId: originalOperationId })
+      .expect(200);
+    const id = submitted.body.data.id as string;
+    expect(submitted.body.data.operationId).toBe(originalOperationId);
+    await request(app)
+      .post(`/api/v1/task-completions/${id}/approve`)
+      .auth(parentToken, { type: 'bearer' })
+      .set('Origin', config.frontendUrl)
+      .send({})
+      .expect(400);
+    await request(app)
+      .post(`/api/v1/task-completions/${id}/approve`)
+      .auth(parentToken, { type: 'bearer' })
+      .set('Origin', config.frontendUrl)
+      .send({ operationId: 'invalid' })
+      .expect(400);
+    const rejection = await request(app)
+      .post(`/api/v1/task-completions/${id}/reject`)
+      .auth(secondParentToken, { type: 'bearer' })
+      .set('Origin', config.frontendUrl)
+      .send({ operationId: originalOperationId, reason: 'Спробуй ще раз' })
+      .expect(200);
+    const repeatedRejection = await request(app)
+      .post(`/api/v1/task-completions/${id}/reject`)
+      .auth(secondParentToken, { type: 'bearer' })
+      .set('Origin', config.frontendUrl)
+      .send({ operationId: originalOperationId, reason: 'Спробуй ще раз' })
+      .expect(200);
+    expect(repeatedRejection.body.data.reviewedAt).toBe(rejection.body.data.reviewedAt);
+    const correctedOperationId = randomUUID();
+    await request(app)
+      .post(`/api/v1/tasks/${task.id}/submit`)
+      .auth(childToken, { type: 'bearer' })
+      .set('Origin', config.frontendUrl)
+      .send({ operationId: correctedOperationId })
+      .expect(200);
+    for (const [decision, actor] of [
+      ['approve', parentToken],
+      ['reject', secondParentToken],
+    ] as const) {
+      const stale = await request(app)
+        .post(`/api/v1/task-completions/${id}/${decision}`)
+        .auth(actor, { type: 'bearer' })
+        .set('Origin', config.frontendUrl)
+        .send({ operationId: originalOperationId })
+        .expect(409);
+      expect(stale.body.error.code).toBe('SUBMISSION_CHANGED');
+    }
+    const unchanged = await database!.taskCompletion.findUniqueOrThrow({ where: { id } });
+    expect(unchanged.status).toBe('SUBMITTED');
+    expect(unchanged.operationId).toBe(correctedOperationId);
+    expect(await database!.pointTransaction.count({ where: { childId: child.childId! } })).toBe(0);
+    await request(app)
+      .post(`/api/v1/task-completions/${id}/approve`)
+      .auth(parentToken, { type: 'bearer' })
+      .set('Origin', config.frontendUrl)
+      .send({ operationId: correctedOperationId })
+      .expect(200);
+    await request(app)
+      .post(`/api/v1/task-completions/${id}/approve`)
+      .auth(secondParentToken, { type: 'bearer' })
+      .set('Origin', config.frontendUrl)
+      .send({ operationId: correctedOperationId })
+      .expect(200);
+    const oldApproval = await request(app)
+      .post(`/api/v1/task-completions/${id}/approve`)
+      .auth(parentToken, { type: 'bearer' })
+      .set('Origin', config.frontendUrl)
+      .send({ operationId: originalOperationId })
+      .expect(409);
+    expect(oldApproval.body.error.code).toBe('SUBMISSION_CHANGED');
+    expect(await database!.pointTransaction.count({ where: { childId: child.childId! } })).toBe(1);
+    expect(
+      await database!.auditLog.count({
+        where: { familyId: parent.familyId, entityId: id, action: 'TASK_REJECTED' },
+      }),
+    ).toBe(1);
+    expect(
+      await database!.auditLog.count({
+        where: { familyId: parent.familyId, entityId: id, action: 'TASK_APPROVED' },
+      }),
+    ).toBe(1);
   });
 
   it('hides tasks, completions and edits across families', async () => {
@@ -360,7 +463,7 @@ describe.skipIf(!database)('Tasks, submissions, reviews and private photos on Po
       .post(`/api/v1/task-completions/${submitted.body.data.id}/approve`)
       .auth(other.parentToken, { type: 'bearer' })
       .set('Origin', config.frontendUrl)
-      .send({})
+      .send({ operationId: submitted.body.data.operationId })
       .expect(404);
     const list = await request(other.app)
       .get('/api/v1/task-completions')
@@ -385,7 +488,7 @@ describe.skipIf(!database)('Tasks, submissions, reviews and private photos on Po
       .post(`/api/v1/task-completions/${id}/approve`)
       .auth(parentToken, { type: 'bearer' })
       .set('Origin', config.frontendUrl)
-      .send({})
+      .send({ operationId: submitted.body.data.operationId })
       .expect(500);
     expect((await database!.taskCompletion.findUniqueOrThrow({ where: { id } })).status).toBe(
       'SUBMITTED',
@@ -518,7 +621,7 @@ describe.skipIf(!database)('Tasks, submissions, reviews and private photos on Po
       .post(`/api/v1/task-completions/${submitted.body.data.id}/reject`)
       .auth(own.parentToken, { type: 'bearer' })
       .set('Origin', config.frontendUrl)
-      .send({ reason: 'Потрібно чіткіше фото' })
+      .send({ operationId: submitted.body.data.operationId, reason: 'Потрібно чіткіше фото' })
       .expect(200);
     const corrected = await request(own.app)
       .post(`/api/v1/tasks/${task.id}/submit`)

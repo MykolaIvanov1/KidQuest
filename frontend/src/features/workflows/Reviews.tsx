@@ -6,7 +6,7 @@ import { reviewSchema, type ReviewInput } from '@kidquest/validation';
 import type { TaskCompletionDto, TaskPhotoDto, RewardRequestDto } from '@kidquest/types';
 import { Camera, CheckCircle2, ClipboardCheck, Gift, Star } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { api, apiBlob } from '../../services/api';
+import { api, apiBlob, ApiError } from '../../services/api';
 import { uk } from '../../lib/i18n';
 import { Field } from '../../pages/auth/AuthPage';
 import { Feedback, QueryState, useRefreshFamilyData } from './common';
@@ -39,10 +39,14 @@ function PrivatePhoto({ photo, index }: { photo: TaskPhotoDto; index: number }) 
 function ReviewActions({
   path,
   canIssue = false,
+  operationId,
+  requireOperationId = false,
   onSuccess,
 }: {
   path: string;
   canIssue?: boolean;
+  operationId?: string | null;
+  requireOperationId?: boolean;
   onSuccess: (action: string) => void;
 }) {
   const [rejecting, setRejecting] = useState(false);
@@ -52,9 +56,16 @@ function ReviewActions({
     formState: { errors },
   } = useForm<ReviewInput>({ resolver: zodResolver(reviewSchema), defaultValues: { reason: '' } });
   const refresh = useRefreshFamilyData();
+  const unavailable = requireOperationId && !operationId;
   const mutation = useMutation({
     mutationFn: ({ action, reason }: { action: 'approve' | 'reject' | 'issue'; reason?: string }) =>
-      api(`${path}/${action}`, { method: 'POST', body: JSON.stringify(reason ? { reason } : {}) }),
+      api(`${path}/${action}`, {
+        method: 'POST',
+        body: JSON.stringify({
+          ...(operationId ? { operationId } : {}),
+          ...(reason ? { reason } : {}),
+        }),
+      }),
     onSuccess: async (_result, input) => {
       onSuccess(input.action);
       setRejecting(false);
@@ -64,11 +75,28 @@ function ReviewActions({
   return (
     <>
       <Feedback error={mutation.error} />
+      {unavailable && (
+        <p className="notice" role="status">
+          {uk.reviewUnavailable}
+        </p>
+      )}
+      {mutation.error instanceof ApiError && mutation.error.status === 409 && (
+        <button
+          type="button"
+          className="button tonal"
+          onClick={() => {
+            void refresh();
+            mutation.reset();
+          }}
+        >
+          {uk.refreshReviews}
+        </button>
+      )}
       <div className="workflow-actions">
         <button
           type="button"
           className="button primary"
-          disabled={mutation.isPending}
+          disabled={mutation.isPending || unavailable}
           onClick={() => mutation.mutate({ action: canIssue ? 'issue' : 'approve' })}
         >
           <CheckCircle2 size={17} />
@@ -78,7 +106,7 @@ function ReviewActions({
           <button
             type="button"
             className="button tonal"
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || unavailable}
             onClick={() => setRejecting((value) => !value)}
           >
             {uk.reject}
@@ -94,7 +122,7 @@ function ReviewActions({
           <Field label={uk.rejectionReason} error={errors.reason?.message}>
             <textarea rows={2} maxLength={1000} {...register('reason')} />
           </Field>
-          <button className="button tonal" disabled={mutation.isPending}>
+          <button className="button tonal" disabled={mutation.isPending || unavailable}>
             {mutation.isPending ? uk.wait : uk.reject}
           </button>
           <button type="button" className="text-button" onClick={() => setRejecting(false)}>
@@ -108,10 +136,11 @@ function ReviewActions({
 
 export function TaskReviews() {
   const query = useQuery({
-    queryKey: ['completions'],
-    queryFn: () => api<TaskCompletionDto[]>('/task-completions'),
+    queryKey: ['completions', 'review'],
+    queryFn: () => api<TaskCompletionDto[]>('/task-completions?status=SUBMITTED'),
   });
   const [message, setMessage] = useState('');
+  const [celebration, setCelebration] = useState(0);
   const pending = query.data?.filter((completion) => completion.status === 'SUBMITTED') || [];
   return (
     <section className="panel review-panel">
@@ -128,8 +157,9 @@ export function TaskReviews() {
       <div className="review-content">
         <QueryState pending={query.isPending} error={query.error} retry={query.refetch} />
         <Feedback success={message} />
-        {message.includes(uk.taskStates.APPROVED.toLowerCase()) && (
+        {celebration > 0 && (
           <motion.div
+            key={celebration}
             className="approval-sparkles"
             aria-hidden="true"
             initial={{ opacity: 1 }}
@@ -157,11 +187,12 @@ export function TaskReviews() {
           <CompletionReview
             key={completion.id}
             completion={completion}
-            onSuccess={(action) =>
+            onSuccess={(action) => {
               setMessage(
                 action === 'approve' ? uk.approvedPoints(completion.pointsSnapshot) : uk.rejected,
-              )
-            }
+              );
+              setCelebration((current) => (action === 'approve' ? current + 1 : 0));
+            }}
           />
         ))}
       </div>
@@ -215,15 +246,23 @@ function CompletionReview({
           )}
         </>
       )}
-      <ReviewActions path={`/task-completions/${completion.id}`} onSuccess={onSuccess} />
+      <ReviewActions
+        path={`/task-completions/${completion.id}`}
+        operationId={completion.operationId}
+        requireOperationId
+        onSuccess={onSuccess}
+      />
     </article>
   );
 }
 
 export function RewardRequests({ parent = false }: { parent?: boolean }) {
   const query = useQuery({
-    queryKey: ['reward-requests'],
-    queryFn: () => api<RewardRequestDto[]>('/reward-requests'),
+    queryKey: ['reward-requests', parent ? 'review' : 'history'],
+    queryFn: () =>
+      api<RewardRequestDto[]>(
+        parent ? '/reward-requests?status=PENDING,APPROVED' : '/reward-requests',
+      ),
   });
   const [message, setMessage] = useState('');
   const rows = parent

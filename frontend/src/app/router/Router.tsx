@@ -1,5 +1,5 @@
-import { lazy, Suspense } from 'react';
-import { Navigate, Route, Routes } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import type { Role } from '@kidquest/types';
 import { useAuth } from '../providers/AuthProvider';
 import { uk } from '../../lib/i18n';
@@ -10,6 +10,10 @@ const RewardsPage = lazy(() => import('../../pages/RewardsPage'));
 
 export function Router() {
   const { user, loading } = useAuth();
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
   const home = user ? (user.role === 'PARENT' ? '/parent' : '/child') : '/login';
   if (loading)
     return (

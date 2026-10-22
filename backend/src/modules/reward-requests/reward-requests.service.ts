@@ -1,4 +1,4 @@
-import { Prisma, type PrismaClient } from '@prisma/client';
+import { Prisma, type PrismaClient, type RewardRequestStatus } from '@prisma/client';
 import type { RewardRequestInput, ReviewInput } from '@kidquest/validation';
 import type { UserRecord } from '../auth/auth.types.js';
 import { AppError } from '../../errors/app-error.js';
@@ -74,12 +74,12 @@ export class RewardRequestService {
     }
   }
 
-  async list(user: UserRecord, requestedChildId?: string) {
+  async list(user: UserRecord, requestedChildId?: string, statuses?: RewardRequestStatus[]) {
     let childId = requestedChildId;
     if (user.role === 'CHILD' || requestedChildId) {
       childId = (await selectedChild(this.db, user, requestedChildId))?.id;
     }
-    const rows = await new RewardRequestRepository(this.db).list(user.familyId, childId);
+    const rows = await new RewardRequestRepository(this.db).list(user.familyId, childId, statuses);
     return rows.map(rewardRequestDto);
   }
 

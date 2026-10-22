@@ -1,5 +1,5 @@
 import { z } from 'zod';
-export { reviewSchema, submitTaskSchema } from '@kidquest/validation';
+export { completionReviewSchema, submitTaskSchema } from '@kidquest/validation';
 
 export const completionFilters = z
   .object({

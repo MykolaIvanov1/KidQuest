@@ -142,7 +142,10 @@ model Task {
   color         String           @default("primary") @db.VarChar(30)
   points        Int
   isRequired    Boolean          @default(false)
+  repeatDaily   Boolean          @default(true)
   photoRequired Boolean          @default(false)
+  startDate     DateTime?        @db.Date
+  endDate       DateTime?        @db.Date
   startTime     String?          @db.VarChar(5)
   endTime       String?          @db.VarChar(5)
   isActive      Boolean          @default(true)

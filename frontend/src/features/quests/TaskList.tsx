@@ -1,12 +1,39 @@
 import { useState } from 'react';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import type { TaskDto } from '@kidquest/types';
-import { Camera, CheckCircle2, Clock3, ListChecks, Send, Star } from 'lucide-react';
+import {
+  CalendarDays,
+  Camera,
+  CheckCircle2,
+  Clock3,
+  ListChecks,
+  Repeat2,
+  Send,
+  Star,
+} from 'lucide-react';
 import { motion } from 'framer-motion';
 import { api } from '../../services/api';
 import { uk } from '../../lib/i18n';
 import { useOnline } from '../../hooks/useOnline';
 import { Feedback, QueryState, useOperationId, useRefreshFamilyData } from '../workflows/common';
+
+function calendarDate(value: string) {
+  return new Intl.DateTimeFormat('uk-UA', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+    timeZone: 'UTC',
+  }).format(new Date(`${value}T12:00:00Z`));
+}
+
+function taskDates(task: TaskDto) {
+  if (task.startDate && task.endDate)
+    return task.startDate === task.endDate
+      ? calendarDate(task.startDate)
+      : uk.dateRange(calendarDate(task.startDate), calendarDate(task.endDate));
+  if (task.startDate) return uk.dateFrom(calendarDate(task.startDate));
+  return task.endDate ? uk.dateThrough(calendarDate(task.endDate)) : '';
+}
 
 export function TaskList({
   parent = false,
@@ -111,10 +138,20 @@ function TaskCard({
           </span>
         )}
         {task.isRequired && <span className="metadata">{uk.requiredBadge}</span>}
+        <span className="metadata">
+          <Repeat2 size={14} />
+          {(task.repeatDaily ?? true) ? uk.dailyBadge : uk.noRepeatBadge}
+        </span>
         {task.photoRequired && (
           <span className="metadata">
             <Camera size={14} />
             {uk.photoRequired}
+          </span>
+        )}
+        {(task.startDate || task.endDate) && (
+          <span className="metadata" aria-label={uk.taskDateRange}>
+            <CalendarDays size={14} />
+            {taskDates(task)}
           </span>
         )}
         {(task.startTime || task.endTime) && (
@@ -136,7 +173,7 @@ function TaskCard({
         <>
           <Feedback
             error={mutation.error}
-            success={mutation.isSuccess ? uk.taskSubmitted : undefined}
+            success={mutation.isSuccess && status === 'SUBMITTED' ? uk.taskSubmitted : undefined}
           />
           {maySubmit && !open && (
             <button

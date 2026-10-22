@@ -22,6 +22,7 @@ export function completionDto(completion: CompletionRecord): CompletionDto {
     status: completion.status,
     completionDate: completion.completionDate.toISOString().slice(0, 10),
     pointsSnapshot: completion.pointsSnapshot,
+    operationId: completion.operationId,
     submittedAt: completion.submittedAt?.toISOString() ?? null,
     reviewedAt: completion.reviewedAt?.toISOString() ?? null,
     rejectionReason: completion.rejectionReason,

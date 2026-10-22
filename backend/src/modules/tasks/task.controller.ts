@@ -17,20 +17,16 @@ export class TaskController {
     res.json({ success: true, data: await this.service.categories(req.authUser!) });
   };
   createCategory = async (req: Request, res: Response) => {
-    res
-      .status(201)
-      .json({
-        success: true,
-        data: await this.service.createCategory(req.authUser!, categorySchema.parse(req.body)),
-      });
+    res.status(201).json({
+      success: true,
+      data: await this.service.createCategory(req.authUser!, categorySchema.parse(req.body)),
+    });
   };
   create = async (req: Request, res: Response) => {
-    res
-      .status(201)
-      .json({
-        success: true,
-        data: await this.service.create(req.authUser!, taskSchema.parse(req.body)),
-      });
+    res.status(201).json({
+      success: true,
+      data: await this.service.create(req.authUser!, taskSchema.parse(req.body)),
+    });
   };
   update = async (req: Request, res: Response) => {
     res.json({

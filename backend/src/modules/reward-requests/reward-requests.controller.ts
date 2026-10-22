@@ -7,7 +7,10 @@ export class RewardRequestController {
 
   list = async (req: Request, res: Response) => {
     const query = rewardRequestQuerySchema.parse(req.query);
-    res.json({ success: true, data: await this.service.list(req.authUser!, query.childId) });
+    res.json({
+      success: true,
+      data: await this.service.list(req.authUser!, query.childId, query.status),
+    });
   };
 
   approve = async (req: Request, res: Response) => {

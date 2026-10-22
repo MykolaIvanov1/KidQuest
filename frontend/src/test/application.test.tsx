@@ -72,7 +72,7 @@ function mockServer({
   let statisticsAttempts = 0;
   const members = [parent, child];
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(input);
+    const url = String(input).split('?')[0]!;
     if (url.endsWith('/auth/refresh'))
       return sessionUser
         ? response({ user: sessionUser, accessToken: 'restored-access' } satisfies AuthSession)
@@ -103,9 +103,12 @@ function mockServer({
           icon: 'ListChecks',
           color: 'primary',
           isRequired: true,
+          repeatDaily: true,
           isActive: true,
           startTime: null,
           endTime: null,
+          startDate: null,
+          endDate: null,
           todayCompletion: null,
         })),
       );

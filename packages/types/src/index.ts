@@ -64,6 +64,7 @@ export interface TaskCompletionDto {
   status: CompletionStatus;
   completionDate: string;
   pointsSnapshot: number;
+  operationId: string | null;
   submittedAt: string | null;
   reviewedAt: string | null;
   rejectionReason: string | null;
@@ -79,7 +80,10 @@ export interface TaskDto {
   color: string;
   points: number;
   isRequired: boolean;
+  repeatDaily: boolean;
   photoRequired: boolean;
+  startDate: string | null;
+  endDate: string | null;
   startTime: string | null;
   endTime: string | null;
   isActive: boolean;

@@ -128,13 +128,13 @@ describe.skipIf(!database)('Повний сімейний HTTP-сценарій'
       .post(`/api/v1/task-completions/${completionId}/approve`)
       .set('Origin', config.frontendUrl)
       .auth(parentToken, { type: 'bearer' })
-      .send({})
+      .send({ operationId })
       .expect(200);
     await request(app)
       .post(`/api/v1/task-completions/${completionId}/approve`)
       .set('Origin', config.frontendUrl)
       .auth(parentToken, { type: 'bearer' })
-      .send({})
+      .send({ operationId })
       .expect(200);
     const earned = await request(app)
       .get('/api/v1/points')
