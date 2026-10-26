@@ -4,7 +4,11 @@
 
 ## Стан перевірки
 
-24.10.2026: production-конфігурацію підготовлено; Caddy 2.11.7 перевірено командою `caddy validate` з тестовим доменом. Окремий тимчасовий HTTP-тест лише на loopback підтвердив SPA fallback з `no-cache`, 404 для відсутніх assets/приватних шляхів, заголовки service worker і кешування hashed assets. SHA256 Windows-архіву Caddy звірено з офіційним GitHub release. Docker CLI встановлено, але Linux engine не запускається: на цьому комп’ютері відсутній WSL. Збірку Linux-образів, запуск production-контейнерів, видачу TLS-сертифіката й телефонні сценарії ще не перевірено. Конфігураційна перевірка не підтверджує працездатність образу. Сайт не опубліковано.
+26.10.2026: WSL 3.0.3 і Docker Engine 29.9.2 працюють. Усі три образи (`api`, `web`, `migrate`) успішно зібрані для Linux/AMD64. На окремих нових volumes перевірено шість міграцій, readiness PostgreSQL/API/Caddy, UID 1000 і read-only root filesystem API. Основна сімейна база не переносилась і не змінювалась.
+
+Окремий HTTPS-стенд на loopback із `tls internal` пройшов 11 перевірок авторизації, secure cookies, приватних фото, балів і нагород. Довіру до сертифіката передавали лише тестовому HTTPS-клієнту; системне сховище Windows не змінювали. Compose backup і відновлення в ще один новий project пройшли 9 перевірок, включно з точним журналом/балансом і читанням старого та записом нового фото непривілейованим API. Тестові контейнери зупинено, volumes збережено.
+
+Публічні DNS/ACME-сертифікат, фізичні Android/iPhone та доставка FCM залишаються окремими перевірками. Сайт не опубліковано. Докладний звіт — у [етапі 8](phase-8.md).
 
 ## Передумови
 
@@ -74,7 +78,7 @@ docker compose --env-file .env.production -f docker-compose.prod.yml logs --tail
 ## Образи, мережі та дані
 
 - API використовує окремий stage із production dependencies й зібраними backend/packages; запускається користувачем `node`. Згенерований Prisma client переноситься до фактичного pnpm-шляху runtime-пакета. Prisma, bcrypt і Sharp використовують сумісну Debian/glibc основу.
-- `migrate` — одноразовий контейнер із Prisma CLI й committed migrations. API не запускає міграції автоматично. Migration stage успадковує workspace зі збірочними залежностями; це окремий операційний образ. Остаточний склад Linux runtime, включно з optional peer dependencies Prisma, потрібно перевірити після збірки образів.
+- `migrate` — одноразовий контейнер із Prisma CLI й committed migrations. API не запускає міграції автоматично. Migration stage успадковує workspace зі збірочними залежностями; це окремий операційний образ. У перевіреному Linux runtime optional peers Prisma зберегли Prisma CLI та TypeScript; Playwright до API-образу не потрапив. Подальше зменшення операційних образів є окремою оптимізацією, не зміною перевіреної поведінки.
 - Web-образ містить Caddy й готові статичні ресурси. Caddy передає `/api` та `/api/*` в API зі збереженням шляху, решта маршрутів застосунку використовує SPA fallback. Каталог фото не монтується до Caddy.
 - Публікуються лише TCP 80 і 443 web-сервісу. PostgreSQL перебуває у внутрішній мережі `database`; API доступний Caddy у мережі `edge`. Контейнерна liveness-перевірка Caddy слухає тільки `127.0.0.1:8080` усередині web.
 - Named volumes: `postgres_data` — БД; `photos` — приватні фото; `caddy_data` — TLS-дані; `caddy_config` — дані Caddy. Звичайне перестворення контейнерів їх зберігає. Команда `down -v` видаляє ці дані, тому її не застосовують до робочого проєкту.
@@ -102,20 +106,20 @@ SHA256 перевіряє цілісність файлів; успішний `p
 
 ## Перевірка відновлення без публікації
 
-Використовуйте окремий Compose project `kidquest-restore` з новими порожніми volumes. Наведені команди не запускають web і не публікують порти. Потрібні вже зібрані образи та завершена перевірена копія; замініть шлях `REPLACE_WITH_BACKUP_DIRECTORY`.
+Використовуйте окремий Compose project `kidquest-restore` з новими порожніми volumes. Наведені команди не запускають web і не публікують порти. Потрібні вже зібрані образи та завершена перевірена копія; замініть шлях `REPLACE_WITH_BACKUP_DIRECTORY`. Підготуйте ігнорований файл `.env.restore` на основі `.env.production`, залишивши всі три серверні `FIREBASE_*` порожніми: тестове відновлення не повинно надсилати сповіщення з відновленої черги.
 
 ```powershell
 pnpm backup --verify .local/backups/REPLACE_WITH_BACKUP_DIRECTORY
-docker compose -p kidquest-restore --env-file .env.production -f docker-compose.prod.yml up -d db
-docker compose -p kidquest-restore --env-file .env.production -f docker-compose.prod.yml create --no-deps api
-docker compose -p kidquest-restore --env-file .env.production -f docker-compose.prod.yml cp .local/backups/REPLACE_WITH_BACKUP_DIRECTORY/database.dump db:/tmp/kidquest-restore.dump
-docker compose -p kidquest-restore --env-file .env.production -f docker-compose.prod.yml exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" exec pg_restore --exit-on-error --single-transaction --no-owner --no-privileges -U "$POSTGRES_USER" -d "$POSTGRES_DB" /tmp/kidquest-restore.dump'
-docker compose -p kidquest-restore --env-file .env.production -f docker-compose.prod.yml cp .local/backups/REPLACE_WITH_BACKUP_DIRECTORY/photos/. api:/app/storage/
-docker compose -p kidquest-restore --env-file .env.production -f docker-compose.prod.yml up -d --no-deps api
-docker compose -p kidquest-restore --env-file .env.production -f docker-compose.prod.yml exec -T api node -e "fetch('http://127.0.0.1:4000/api/v1/ready').then(r => { console.log(r.status); if (!r.ok) process.exitCode=1; }).catch(() => process.exitCode=1)"
+docker compose -p kidquest-restore --env-file .env.restore -f docker-compose.prod.yml up -d db
+docker compose -p kidquest-restore --env-file .env.restore -f docker-compose.prod.yml up --no-start --no-deps --no-build --pull never api
+docker compose -p kidquest-restore --env-file .env.restore -f docker-compose.prod.yml cp .local/backups/REPLACE_WITH_BACKUP_DIRECTORY/database.dump db:/tmp/kidquest-restore.dump
+docker compose -p kidquest-restore --env-file .env.restore -f docker-compose.prod.yml exec -T db sh -c 'PGPASSWORD="$POSTGRES_PASSWORD" exec pg_restore --exit-on-error --single-transaction --no-owner --no-privileges -U "$POSTGRES_USER" -d "$POSTGRES_DB" /tmp/kidquest-restore.dump'
+docker compose -p kidquest-restore --env-file .env.restore -f docker-compose.prod.yml cp .local/backups/REPLACE_WITH_BACKUP_DIRECTORY/photos/. api:/app/storage/
+docker compose -p kidquest-restore --env-file .env.restore -f docker-compose.prod.yml up -d --no-deps api
+docker compose -p kidquest-restore --env-file .env.restore -f docker-compose.prod.yml exec -T api node -e "fetch('http://127.0.0.1:4000/api/v1/ready').then(r => { console.log(r.status); if (!r.ok) process.exitCode=1; }).catch(() => process.exitCode=1)"
 ```
 
-Дочекайтеся готовності БД перед `pg_restore`, а API — перед перевіркою ready. Для використаного раніше `kidquest-restore` оберіть інше нове project name: імпорт розрахований на порожню БД. Після `docker compose cp` перевірте власника фото: runtime API працює з UID/GID `1000:1000`; у новому volume йому потрібні права читати, додавати й видаляти фото. Відновлення до робочого проєкту з існуючими даними потребує окремої зупинки запису, нової страхової копії та погодженого плану заміни. Не запускайте паралельно web recovery-проєкту з production web на тих самих портах.
+Дочекайтеся готовності БД перед `pg_restore`, а API — перед перевіркою ready. Для створення зупиненого API використано перевірену команду `up --no-start --no-deps`; `compose create` не має прапорця `--no-deps` у перевіреній версії CLI. Для використаного раніше `kidquest-restore` оберіть інше нове project name: імпорт розрахований на порожню БД. Після `docker compose cp` перевірте власника фото: runtime API працює з UID/GID `1000:1000`; у новому volume йому потрібні права читати, додавати й видаляти фото. Відновлення до робочого проєкту з існуючими даними потребує окремої зупинки запису, нової страхової копії та погодженого плану заміни. Не запускайте паралельно web recovery-проєкту з production web на тих самих портах.
 
 ## Оновлення й журнали
 

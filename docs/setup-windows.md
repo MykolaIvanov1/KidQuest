@@ -19,7 +19,7 @@ wsl --install --no-distribution
 
 Дочекайтеся завершення й перезавантажте Windows, якщо інсталятор цього потребує. Після запуску Docker Desktop увімкніть WSL 2 engine та Linux containers. Команда `docker version` має показати і Client, і Server без помилки. Якщо WSL уже встановлено, перевірте `wsl --update` та повідомлення самого Docker Desktop; причину не можна визначити лише за наявністю Docker CLI.
 
-Команда встановлює компонент WSL без окремого Linux-дистрибутива. Джерела: [Microsoft WSL](https://learn.microsoft.com/en-us/windows/wsl/basic-commands#install), [Docker Desktop для Windows](https://docs.docker.com/desktop/setup/install/windows-install/). На цьому комп’ютері 24.10.2026 CLI встановлено, але Docker Engine ще не запускається через відсутній WSL; дані застосунку перевіряються з окремим локальним PostgreSQL.
+Команда встановлює компонент WSL без окремого Linux-дистрибутива. Джерела: [Microsoft WSL](https://learn.microsoft.com/en-us/windows/wsl/basic-commands#install), [Docker Desktop для Windows](https://docs.docker.com/desktop/setup/install/windows-install/). 24.10.2026 на цьому комп’ютері був відсутній WSL. Станом на 26.10.2026 WSL і Docker Engine встановлені та працюють; Linux-образи, HTTPS API та Compose backup/restore перевірені на окремих тестових даних. Наявна сімейна база продовжує працювати з локальним PostgreSQL.
 
 ## Конфігурація
 
