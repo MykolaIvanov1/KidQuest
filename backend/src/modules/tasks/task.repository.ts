@@ -6,6 +6,8 @@ import { AppError } from '../../errors/app-error.js';
 import { withTransaction } from '../../database/transaction.js';
 import { completionDto, completionInclude } from '../task-completions/completion.repository.js';
 import { dateColumn, dateOnly, familyClock, taskForDayWhere } from './task-time.js';
+import { saveTaskSchedule } from './task-schedule.js';
+import { notifyFamilyChildren } from '../notifications/notification.events.js';
 
 type TaskRecord = Prisma.TaskGetPayload<{ include: { category: true } }>;
 const missingTask = () => new AppError(404, 'TASK_NOT_FOUND', 'Квест не знайдено.');
@@ -13,6 +15,7 @@ const missingTask = () => new AppError(404, 'TASK_NOT_FOUND', 'Квест не �
 function taskDto(task: TaskRecord): TaskDto {
   return {
     id: task.id,
+    updatedAt: task.updatedAt.toISOString(),
     title: task.title,
     description: task.description,
     categoryId: task.categoryId,
@@ -131,6 +134,16 @@ export class TaskRepository {
           entityId: task.id,
         },
       });
+      await saveTaskSchedule(tx, task);
+      if (task.isActive) {
+        await notifyFamilyChildren(tx, user.familyId, {
+          eventKey: `task:${task.id}:created`,
+          type: 'TASK_CREATED',
+          title: 'На тебе чекає новий квест!',
+          body: `Додано квест «${task.title}». Він буде доступний у заплановані дні виконання.`,
+          path: '/child/adventure',
+        });
+      }
       return taskDto(task);
     });
   }
@@ -182,6 +195,7 @@ export class TaskRepository {
           entityId: id,
         },
       });
+      await saveTaskSchedule(tx, task);
       return taskDto(task);
     });
   }
@@ -192,7 +206,11 @@ export class TaskRepository {
         where: { id, familyId: user.familyId, deletedAt: null },
       });
       if (!current) throw missingTask();
-      await tx.task.update({ where: { id }, data: { deletedAt: new Date(), isActive: false } });
+      const task = await tx.task.update({
+        where: { id },
+        data: { deletedAt: new Date(), isActive: false },
+      });
+      await saveTaskSchedule(tx, task);
       await tx.auditLog.create({
         data: {
           familyId: user.familyId,

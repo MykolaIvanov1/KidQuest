@@ -9,6 +9,18 @@
 
 Якщо команда `pnpm` недоступна, встановіть її через `npm install --global pnpm@11.25.0`. Якщо PowerShell блокує shim-скрипт, використовуйте `pnpm.cmd` та `npm.cmd`.
 
+## Якщо Docker Desktop не запускається
+
+Перевірте `wsl --status` і `docker version`. Якщо Windows повідомляє, що WSL не встановлено, відкрийте PowerShell **від імені адміністратора**:
+
+```powershell
+wsl --install --no-distribution
+```
+
+Дочекайтеся завершення й перезавантажте Windows, якщо інсталятор цього потребує. Після запуску Docker Desktop увімкніть WSL 2 engine та Linux containers. Команда `docker version` має показати і Client, і Server без помилки. Якщо WSL уже встановлено, перевірте `wsl --update` та повідомлення самого Docker Desktop; причину не можна визначити лише за наявністю Docker CLI.
+
+Команда встановлює компонент WSL без окремого Linux-дистрибутива. Джерела: [Microsoft WSL](https://learn.microsoft.com/en-us/windows/wsl/basic-commands#install), [Docker Desktop для Windows](https://docs.docker.com/desktop/setup/install/windows-install/). На цьому комп’ютері 24.10.2026 CLI встановлено, але Docker Engine ще не запускається через відсутній WSL; дані застосунку перевіряються з окремим локальним PostgreSQL.
+
 ## Конфігурація
 
 ```powershell
@@ -44,6 +56,24 @@ Seed необов'язковий. Для нього явно задайте emai
 
 Якщо PostgreSQL вже встановлено локально, Docker не потрібний: створіть окрему базу та користувача, задайте власний `DATABASE_URL` у `.env`, потім виконайте команди Prisma. Застосунок використовує PostgreSQL, без додаткових баз даних.
 
+## Поточна локальна база без Docker
+
+На цьому комп’ютері застосунок уже використовує окремий PostgreSQL 17 у `.local/dev-postgres/data` на `127.0.0.1:56179`; його конфігурація збережена в ігнорованому `.env`. Docker volume — інше сховище: встановлення Docker саме не переносить ці сімейні дані. Перед перемиканням на Docker потрібно зробити перевірену копію й перенести БД та фото за [backup.md](backup.md).
+
+Після перезавантаження Windows перевірте стан локального сервера:
+
+```powershell
+& 'C:/Program Files/PostgreSQL/17/bin/pg_ctl.exe' status -D '.local/dev-postgres/data'
+```
+
+Лише якщо він не запущений, запустіть його з тим самим каталогом і портом:
+
+```powershell
+& 'C:/Program Files/PostgreSQL/17/bin/pg_ctl.exe' start -D '.local/dev-postgres/data' -o '-p 56179 -h 127.0.0.1' -l '.local/dev-postgres/server.log'
+```
+
+Після збірки (`pnpm build`) запустіть `pnpm --filter @kidquest/backend start`, а в іншому PowerShell — `pnpm --filter @kidquest/frontend preview --port 5173 --strictPort`. Відкривайте саме `http://localhost:5173`, що відповідає поточному FRONTEND_URL. Це локальний production preview для QA, а не публічний сервер. Для роботи над кодом замість цих двох процесів використовуйте `pnpm dev`.
+
 ## Тести з PostgreSQL
 
 `pnpm test` завжди запускає HTTP-перевірки з in-memory адаптером. Щоб додати ті самі перевірки реального Prisma-репозиторію, створіть окрему PostgreSQL-базу, застосуйте до неї міграції та передайте її URL у змінній середовища `DATABASE_TEST_URL` перед запуском `pnpm test`. Для застосування міграції тимчасово задайте `DATABASE_URL` тієї самої тестової бази в поточному процесі PowerShell. Після перевірки відновіть робочу конфігурацію. Не використовуйте сімейну базу для тестів.
@@ -56,13 +86,15 @@ Seed необов'язковий. Для нього явно задайте emai
 
 Зупиніть процеси розробки через `Ctrl+C`. Команда `docker compose down` зупиняє контейнер, зберігаючи volume бази. `docker compose down --volumes` видаляє локальні дані — не використовуйте її, якщо їх потрібно зберегти.
 
-Резервну копію робіть через встановлений `pg_dump`. Наприклад, після читання актуального `DATABASE_URL` з вашого локального середовища:
+Для узгодженої копії зупиніть процеси API/worker та використайте скрипт, що копіює і БД, і приватні фото:
 
 ```powershell
-pg_dump --dbname=$env:DATABASE_URL --file=backup.sql
+pnpm backup --pg-bin 'C:/Program Files/PostgreSQL/17/bin' --writes-paused
 ```
 
-Файл копії містить приватні дані та не повинен потрапляти до Git.
+Потрібні встановлені PostgreSQL client tools; після завершення знову запустіть API. Дані копії приватні та не повинні потрапляти до Git. Параметри для Docker, перевірка SHA256 і відновлення в порожню БД описані в [backup.md](backup.md).
+
+Браузерний прогін Chromium/WebKit з окремою базою описано в [phase-8.md](phase-8.md). Для майбутнього серверного розгортання використовуйте [production.md](production.md); для перевірки на телефонах — [mobile-qa.md](mobile-qa.md).
 
 ## PWA та зовнішні налаштування
 
@@ -81,4 +113,4 @@ pnpm --filter @kidquest/frontend preview --port 5173 --strictPort
 
 Service worker потребує HTTPS або `localhost`; проста HTTP-адреса комп'ютера в локальній мережі на телефоні не є еквівалентом HTTPS. Для іншої адреси frontend відповідно змініть `FRONTEND_URL` у локальному `.env` та перезапустіть backend.
 
-Для першого етапу ключі Firebase та AI не потрібні. Їхні інтеграції, push-сповіщення та повний офлайн-цикл із чергою синхронізації належать до наступних етапів.
+Основні можливості та сповіщення всередині застосунку працюють без зовнішніх ключів. Для push заповніть Firebase-змінні за [інструкцією](phase-4.md). Офлайн-перегляд і черга виконань з фото реалізовані; перевіряйте їх з production build/preview за [інструкцією](phase-6.md). Квестик працює в локальному режимі без AI-ключа; підключення зовнішнього провайдера описане в [документації модуля](phase-7.md). Встановлення PWA та доставку push на фізичний телефон потрібно перевірити з HTTPS і налаштованим Firebase.

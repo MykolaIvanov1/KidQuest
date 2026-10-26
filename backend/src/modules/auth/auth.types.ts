@@ -3,6 +3,7 @@ import type { MemberInput, RegisterInput } from '@kidquest/validation';
 
 export interface UserRecord extends PublicUser {
   passwordHash: string;
+  authVersion: number;
   isActive: boolean;
   deletedAt: Date | null;
   familyDeletedAt: Date | null;
@@ -14,6 +15,7 @@ export interface RefreshRecord {
   userId: string;
   tokenHash: string;
   sessionId: string;
+  authVersion: number;
   expiresAt: Date;
   revokedAt: Date | null;
 }
@@ -27,7 +29,12 @@ export interface AuthRepository {
   findByEmail(email: string): Promise<UserRecord | null>;
   findById(id: string): Promise<UserRecord | null>;
   createFamilyWithParent(input: RegisterInput, passwordHash: string): Promise<UserRecord>;
-  createMember(familyId: string, input: MemberInput, passwordHash: string): Promise<PublicUser>;
+  createMember(
+    familyId: string,
+    input: MemberInput,
+    passwordHash: string,
+    actor?: { id: string; authVersion: number },
+  ): Promise<PublicUser>;
   listMembers(familyId: string): Promise<PublicUser[]>;
   addLoginLog(userId: string | null, metadata: LoginMetadata, success: boolean): Promise<void>;
   createRefresh(input: Omit<RefreshRecord, 'id' | 'revokedAt'>): Promise<RefreshRecord>;
@@ -43,6 +50,7 @@ export interface AuthConfig {
   accessSeconds: number;
   refreshDays: number;
   production: boolean;
+  trustProxy?: boolean;
 }
 
 export function publicUser(user: PublicUser): PublicUser {

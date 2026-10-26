@@ -1,4 +1,9 @@
-import type { CategoryInput, TaskInput, TaskUpdateInput } from '@kidquest/validation';
+import type {
+  CategoryInput,
+  TaskInput,
+  TaskUpdateInput,
+  SubmitTaskInput,
+} from '@kidquest/validation';
 import type { UserRecord } from '../auth/auth.types.js';
 import type { CompletionService } from '../task-completions/completion.service.js';
 import type { TaskRepository } from './task.repository.js';
@@ -26,7 +31,7 @@ export class TaskService {
   remove(user: UserRecord, id: string) {
     return this.repository.remove(user, id);
   }
-  submit(user: UserRecord, id: string, operationId: string, files: Express.Multer.File[]) {
-    return this.completions.submit(user, id, operationId, files);
+  submit(user: UserRecord, id: string, input: SubmitTaskInput, files: Express.Multer.File[]) {
+    return this.completions.submit(user, id, input, files);
   }
 }

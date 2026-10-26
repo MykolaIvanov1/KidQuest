@@ -1,6 +1,15 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { AppError } from '../errors/app-error.js';
 
+/** Prisma wraps serialization/deadlock failures from raw SQL as P2010 with SQLSTATE. */
+export function isRetryableTransactionError(error: unknown): boolean {
+  if (!(error instanceof Prisma.PrismaClientKnownRequestError)) return false;
+  return (
+    error.code === 'P2034' ||
+    (error.code === 'P2010' && (error.meta?.code === '40001' || error.meta?.code === '40P01'))
+  );
+}
+
 export async function withTransaction<T>(
   db: PrismaClient,
   work: (transaction: Prisma.TransactionClient) => Promise<T>,
@@ -13,7 +22,7 @@ export async function withTransaction<T>(
         timeout: 10_000,
       });
     } catch (error: unknown) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2034') {
+      if (isRetryableTransactionError(error)) {
         if (attempt < 2) continue;
         throw new AppError(409, 'CONCURRENT_UPDATE', 'Дані змінилися. Повторіть запит.');
       }

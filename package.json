@@ -12,7 +12,7 @@
     "dev": "pnpm --parallel --filter @kidquest/backend --filter @kidquest/frontend dev",
     "build": "pnpm -r build",
     "pretypecheck": "pnpm --filter \"./packages/**\" build",
-    "typecheck": "pnpm -r typecheck && tsc -p prisma/tsconfig.json",
+    "typecheck": "pnpm -r typecheck && tsc -p prisma/tsconfig.json && tsc -p tsconfig.e2e.json",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
@@ -24,7 +24,12 @@
     "db:deploy": "prisma migrate deploy",
     "db:migrate": "prisma migrate dev",
     "db:seed": "tsx prisma/seed.ts",
-    "db:test": "tsx prisma/verify-invariants.ts"
+    "db:test": "tsx prisma/verify-invariants.ts",
+    "test:e2e": "node scripts/e2e-run.mjs",
+    "test:e2e:install": "node scripts/e2e-install.mjs",
+    "backup": "node -- scripts/backup.mjs",
+    "setup:production": "node scripts/setup-production-env.mjs",
+    "test:tooling": "node --test scripts/*.test.mjs"
   },
   "prisma": {
     "schema": "prisma/schema.prisma",
@@ -32,6 +37,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
+    "@playwright/test": "^1.64.1",
     "@types/bcrypt": "^6.0.0",
     "@types/node": "^22.19.0",
     "bcrypt": "^6.0.0",

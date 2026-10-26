@@ -8,6 +8,7 @@ import { pointBalance, selectedChild } from '../points/points.repository.js';
 import { RewardRequestRepository } from './reward-requests.repository.js';
 import { rewardRequestDto, type RequestRecord } from './reward-requests.types.js';
 import { logger } from '../../utils/logger.js';
+import { notifyChild, notifyFamilyParents } from '../notifications/notification.events.js';
 
 const notFound = () => new AppError(404, 'REWARD_REQUEST_NOT_FOUND', 'Запит нагороди не знайдено.');
 const operationConflict = () =>
@@ -54,6 +55,13 @@ export class RewardRequestService {
           status: 'PENDING',
         });
         await repository.audit(user.familyId, user.id, 'REWARD_REQUESTED', request.id);
+        await notifyFamilyParents(transaction, user.familyId, {
+          eventKey: `reward-request:${request.id}:requested`,
+          type: 'REWARD_REQUESTED',
+          title: 'Новий запит нагороди',
+          body: `Дитина запитує нагороду «${reward.title}» за ${request.costSnapshot} балів.`,
+          path: '/parent/rewards',
+        });
         return { created: true, request: rewardRequestDto(request) };
       });
       if (result.created) {
@@ -121,6 +129,13 @@ export class RewardRequestService {
         createdById: user.id,
       });
       await repository.audit(user.familyId, user.id, 'REWARD_REQUEST_APPROVED', id);
+      await notifyChild(transaction, user.familyId, request.childId, {
+        eventKey: `reward-request:${id}:APPROVED`,
+        type: 'REWARD_APPROVED',
+        title: 'Нагороду підтверджено!',
+        body: `Батьки підтвердили «${request.reward.title}». Списано ${request.costSnapshot} балів.`,
+        path: '/child/rewards',
+      });
       return rewardRequestDto(updated);
     });
     logger.info('reward.approve_succeeded', {
@@ -145,6 +160,13 @@ export class RewardRequestService {
         rejectionReason: input.reason?.trim() || null,
       });
       await repository.audit(user.familyId, user.id, 'REWARD_REQUEST_REJECTED', id);
+      await notifyChild(transaction, user.familyId, request.childId, {
+        eventKey: `reward-request:${id}:REJECTED`,
+        type: 'REWARD_REJECTED',
+        title: 'Відповідь на запит нагороди',
+        body: `Зараз батьки не підтвердили «${request.reward.title}». Переглянь їхній коментар.`,
+        path: '/child/rewards',
+      });
       return rewardRequestDto(updated);
     });
     logger.info('reward.reject_succeeded', {
@@ -168,6 +190,13 @@ export class RewardRequestService {
         issuedById: user.id,
       });
       await repository.audit(user.familyId, user.id, 'REWARD_ISSUED', id);
+      await notifyChild(transaction, user.familyId, request.childId, {
+        eventKey: `reward-request:${id}:ISSUED`,
+        type: 'REWARD_ISSUED',
+        title: 'Нагороду отримано!',
+        body: `«${request.reward.title}» вже видано. Приємних вражень!`,
+        path: '/child/rewards',
+      });
       return rewardRequestDto(updated);
     });
     logger.info('reward.issue_succeeded', {

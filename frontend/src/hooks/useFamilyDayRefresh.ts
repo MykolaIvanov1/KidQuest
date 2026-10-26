@@ -26,9 +26,16 @@ export function useFamilyDayRefresh(userId?: string) {
       if (nextDay === day) return;
       day = nextDay;
       void Promise.all(
-        ['tasks', 'dashboard', 'completions', 'points', 'point-history'].map((key) =>
-          client.invalidateQueries({ queryKey: [key] }),
-        ),
+        [
+          'tasks',
+          'dashboard',
+          'completions',
+          'points',
+          'point-history',
+          'achievements',
+          'calendar',
+          'progress',
+        ].map((key) => client.invalidateQueries({ queryKey: [key] })),
       );
     };
     // Check the calendar day rather than adding 24 hours: DST can change a day's length.

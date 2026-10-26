@@ -134,7 +134,97 @@ async function main(): Promise<void> {
         },
       });
     });
-    console.info('6 database invariant checks passed; all fixtures rolled back.');
+    await rejects(
+      'Task schedule cannot reference another family task',
+      'P2003',
+      async (transaction) => {
+        const { family } = await profile(transaction);
+        const category = await transaction.taskCategory.create({
+          data: { familyId: family.id, name: 'Schedule verification' },
+        });
+        const task = await transaction.task.create({
+          data: {
+            familyId: family.id,
+            categoryId: category.id,
+            title: 'Scheduled task',
+            points: 10,
+          },
+        });
+        const otherFamily = await transaction.family.create({ data: { name: 'Other family' } });
+        await transaction.taskScheduleVersion.create({
+          data: {
+            taskId: task.id,
+            familyId: otherFamily.id,
+            effectiveFrom: new Date('2026-10-22T00:00:00.000Z'),
+            title: task.title,
+            isRequired: true,
+            repeatDaily: true,
+            isActive: true,
+          },
+        });
+      },
+    );
+    await rejects(
+      'Notification event cannot be duplicated for one recipient',
+      'P2002',
+      async (transaction) => {
+        const { user } = await profile(transaction);
+        const data = {
+          userId: user.id,
+          eventKey: 'one-domain-event',
+          type: 'SYSTEM',
+          title: 'Test notification',
+          body: 'Invariant verification',
+        };
+        await transaction.notification.create({ data });
+        await transaction.notification.create({ data });
+      },
+    );
+    async function deliveryReferences(transaction: Prisma.TransactionClient) {
+      const { user } = await profile(transaction);
+      const notification = await transaction.notification.create({
+        data: { userId: user.id, type: 'SYSTEM', title: 'Test delivery', body: 'Test' },
+      });
+      const device = await transaction.device.create({
+        data: { userId: user.id, token: randomUUID() },
+      });
+      return { notificationId: notification.id, deviceId: device.id, deviceVersion: 1 };
+    }
+    await rejects(
+      'Processing push delivery requires a fenced lease',
+      '23514',
+      async (transaction) => {
+        await transaction.pushDelivery.create({
+          data: { ...(await deliveryReferences(transaction)), status: 'PROCESSING' },
+        });
+      },
+    );
+    await rejects('Push delivery rejects negative attempt count', '23514', async (transaction) => {
+      await transaction.pushDelivery.create({
+        data: { ...(await deliveryReferences(transaction)), attempts: -1 },
+      });
+    });
+    await rejects('User rejects negative authentication version', '23514', async (transaction) => {
+      const { user } = await profile(transaction);
+      await transaction.user.update({ where: { id: user.id }, data: { authVersion: -1 } });
+    });
+    await rejects(
+      'Refresh token rejects negative authentication version',
+      '23514',
+      async (transaction) => {
+        const { user } = await profile(transaction);
+        await transaction.refreshToken.create({
+          data: {
+            userId: user.id,
+            sessionId: randomUUID(),
+            tokenHash: randomUUID(),
+            expiresAt: new Date(Date.now() + 60_000),
+            authVersion: -1,
+          },
+        });
+      },
+    );
+    console.info('12 database invariant checks passed; all fixtures rolled back.');
   } finally {
     await prisma.$disconnect();
   }

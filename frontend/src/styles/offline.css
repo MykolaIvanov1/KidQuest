@@ -1,0 +1,100 @@
+.offline-status {
+  border: 1px solid var(--md-sys-color-outline-variant);
+  background: var(--md-sys-color-surface-container);
+  border-radius: 20px;
+  padding: 18px 20px;
+  margin-bottom: 24px;
+  overflow-wrap: anywhere;
+}
+.offline-status-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+.offline-status-icon {
+  color: var(--md-sys-color-primary);
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.offline-status-heading > div {
+  flex: 1;
+  min-width: 0;
+}
+.offline-status strong {
+  font-size: 0.9rem;
+}
+.offline-status p {
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--md-sys-color-on-surface-variant);
+  margin: 6px 0 0;
+}
+.offline-status small {
+  display: block;
+  margin-top: 6px;
+  font-size: 0.75rem;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.offline-status .text-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+.offline-errors {
+  padding: 0;
+  margin: 16px 0 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+.offline-errors > li {
+  background: var(--md-sys-color-surface);
+  border-inline-start: 3px solid var(--md-sys-color-error);
+  border-radius: 12px;
+  padding: 14px 16px;
+}
+.offline-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.offline-discard-confirm {
+  margin-top: 12px;
+}
+.status-chip.queued {
+  background: var(--md-sys-color-secondary-container);
+  color: var(--md-sys-color-on-surface);
+}
+.status-chip.queue-failed {
+  background: var(--md-sys-color-error-container);
+  color: var(--md-sys-color-error);
+}
+.offline-spin {
+  animation: offline-spin 1.5s linear infinite;
+}
+@keyframes offline-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .offline-spin {
+    animation: none;
+  }
+}
+@media (max-width: 600px) {
+  .offline-status {
+    padding: 16px;
+  }
+  .offline-status-heading {
+    flex-wrap: wrap;
+  }
+  .offline-status-heading > .text-button {
+    margin-inline-start: 33px;
+  }
+}

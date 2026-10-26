@@ -280,7 +280,12 @@ export function RewardRequests({ parent = false }: { parent?: boolean }) {
         </div>
       </div>
       <div className="review-content">
-        <QueryState pending={query.isPending} error={query.error} retry={query.refetch} />
+        <QueryState
+          hasData={!parent && query.data !== undefined}
+          pending={query.isPending}
+          error={query.error}
+          retry={query.refetch}
+        />
         <Feedback success={message} />
         {rows && !rows.length && (
           <div className="empty-state compact">

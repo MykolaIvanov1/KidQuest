@@ -1,0 +1,207 @@
+.account-profile,
+.family-account-settings,
+.login-journal {
+  padding: 26px;
+  margin-bottom: 24px;
+  min-width: 0;
+}
+.account-profile-title,
+.family-account-settings > h2,
+.login-journal > h2,
+.account-security-form h3 {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.account-profile-title {
+  margin-bottom: 24px;
+}
+.account-profile-title h2,
+.family-account-settings > h2,
+.login-journal > h2 {
+  font-size: 21px;
+  margin-bottom: 7px;
+}
+.account-profile-title p {
+  margin-bottom: 0;
+}
+.account-avatar {
+  display: grid;
+  place-items: center;
+  width: 60px;
+  height: 60px;
+  flex-shrink: 0;
+  border-radius: 20px;
+  color: var(--md-sys-color-on-primary-container);
+  background: var(--md-sys-color-primary-container);
+}
+.account-details {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px 28px;
+  margin: 0;
+}
+.account-details dt,
+.journal-entry dt {
+  font-size: 12px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+.account-details dd {
+  margin: 5px 0 0;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.account-profile-hint {
+  margin-top: 22px;
+  margin-bottom: 0;
+  font-size: 13px;
+}
+.account-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 24px;
+}
+.family-account-settings > .muted,
+.login-journal > .muted {
+  margin-bottom: 24px;
+  font-size: 14px;
+}
+.family-account-settings > .field {
+  max-width: 600px;
+}
+.account-security-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 22px;
+}
+.account-security-form {
+  min-width: 0;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 18px;
+  padding: 22px;
+  align-self: start;
+}
+.account-security-form h3 {
+  font-size: 17px;
+  margin-bottom: 22px;
+  line-height: 1.4;
+}
+.account-security-form h3 svg,
+.family-account-settings > h2 svg,
+.login-journal > h2 svg {
+  flex-shrink: 0;
+  color: var(--md-sys-color-primary);
+}
+.account-security-form > .muted {
+  font-size: 13px;
+  margin: -8px 0 22px;
+}
+.account-security-form > .button {
+  min-height: 48px;
+  white-space: normal;
+  text-align: center;
+}
+.journal-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+}
+.journal-entry {
+  padding: 20px;
+  border: 1px solid var(--md-sys-color-outline-variant);
+  border-radius: 18px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.journal-result {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  margin-bottom: 18px;
+}
+.journal-result svg {
+  flex-shrink: 0;
+}
+.journal-result.successful {
+  color: var(--md-sys-color-primary);
+}
+.journal-result.failed {
+  color: var(--md-sys-color-error);
+}
+.journal-user,
+.journal-email {
+  display: block;
+}
+.journal-email {
+  color: var(--md-sys-color-on-surface-variant);
+  font-size: 13px;
+  margin-top: 5px;
+}
+.journal-entry dl {
+  display: grid;
+  gap: 12px;
+  margin: 20px 0 0;
+}
+.journal-entry dd {
+  margin: 4px 0 0;
+  font-size: 13px;
+}
+.journal-agent {
+  font-size: 12px;
+  margin-top: 14px;
+}
+.journal-agent summary {
+  cursor: pointer;
+  min-height: 44px;
+  display: list-item;
+  align-content: center;
+  color: var(--md-sys-color-primary);
+}
+.journal-agent p {
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+.journal-empty {
+  margin: 0 0 20px;
+  padding: 20px;
+  background: var(--md-sys-color-surface-container);
+  border-radius: 14px;
+  color: var(--md-sys-color-on-surface-variant);
+}
+@media (max-width: 760px) {
+  .account-security-grid,
+  .journal-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+@media (max-width: 600px) {
+  .account-profile,
+  .family-account-settings,
+  .login-journal {
+    padding: 20px;
+  }
+  .account-details {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .account-security-form {
+    padding: 18px;
+  }
+  .journal-filters {
+    flex-direction: column;
+    gap: 0;
+  }
+  .account-links > .button {
+    width: 100%;
+  }
+  .mobile-navigation .nav-link {
+    min-width: 0;
+    padding: 8px 2px;
+    font-size: 9px;
+    overflow-wrap: anywhere;
+  }
+}

@@ -10,13 +10,11 @@ self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) =>
-        Promise.all(
-          keys
-            .filter((key) => key.startsWith('kidquest-shell-') && key !== CACHE)
-            .map((key) => caches.delete(key)),
-        ),
-      )
+      .then((keys) => {
+        // Keep the previous public bundle for lazy chunks used by already-open tabs.
+        const previous = keys.filter((key) => key.startsWith('kidquest-shell-') && key !== CACHE);
+        return Promise.all(previous.slice(0, -1).map((key) => caches.delete(key)));
+      })
       .then(() => self.clients.claim()),
   );
 });
@@ -29,12 +27,16 @@ self.addEventListener('fetch', (event) => {
   )
     return;
   if (event.request.mode === 'navigate') {
-    event.respondWith(fetch(event.request).catch(() => caches.match('/')));
+    event.respondWith(
+      fetch(event.request).catch(() => caches.open(CACHE).then((cache) => cache.match('/'))),
+    );
     return;
   }
   if (url.pathname.startsWith('/assets/') || url.pathname.startsWith('/icons/')) {
     event.respondWith(
-      caches.match(event.request).then(
+      // These same-origin public files have one representation per URL. A server's
+      // Vary: Origin must not hide precached modules from an offline module request.
+      caches.match(event.request, { ignoreVary: true }).then(
         (cached) =>
           cached ||
           fetch(event.request).then((response) => {

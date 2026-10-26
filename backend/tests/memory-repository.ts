@@ -36,6 +36,7 @@ export class MemoryRepository implements AuthRepository {
       lastName: input.lastName ?? '',
       role: 'PARENT',
       passwordHash,
+      authVersion: 0,
       isActive: true,
       deletedAt: null,
       familyDeletedAt: null,
@@ -45,7 +46,25 @@ export class MemoryRepository implements AuthRepository {
     return user;
   }
 
-  async createMember(familyId: string, input: MemberInput, passwordHash: string) {
+  async createMember(
+    familyId: string,
+    input: MemberInput,
+    passwordHash: string,
+    actor?: { id: string; authVersion: number },
+  ) {
+    if (
+      actor &&
+      !this.users.some(
+        (user) =>
+          user.id === actor.id &&
+          user.familyId === familyId &&
+          user.authVersion === actor.authVersion &&
+          user.role === 'PARENT' &&
+          user.isActive &&
+          !user.deletedAt,
+      )
+    )
+      throw new AppError(401, 'UNAUTHENTICATED', 'Увійдіть до свого облікового запису.');
     if (await this.findByEmail(input.email))
       throw new AppError(409, 'EMAIL_IN_USE', 'Адреса зайнята.');
     if (
@@ -63,6 +82,7 @@ export class MemoryRepository implements AuthRepository {
       lastName: input.lastName ?? '',
       role: input.role,
       passwordHash,
+      authVersion: 0,
       isActive: true,
       deletedAt: null,
       familyDeletedAt: null,

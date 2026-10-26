@@ -3,9 +3,11 @@ packages:
   - backend
   - packages/*
 allowBuilds:
+  '@firebase/util': false
   '@prisma/client': true
   '@prisma/engines': true
   bcrypt: true
   esbuild: true
   prisma: true
+  protobufjs: false
   sharp: true

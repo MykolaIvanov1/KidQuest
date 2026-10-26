@@ -6,6 +6,7 @@ import {
   Camera,
   CheckCircle2,
   Clock3,
+  CloudUpload,
   ListChecks,
   Repeat2,
   Send,
@@ -14,8 +15,10 @@ import {
 import { motion } from 'framer-motion';
 import { api } from '../../services/api';
 import { uk } from '../../lib/i18n';
-import { useOnline } from '../../hooks/useOnline';
-import { Feedback, QueryState, useOperationId, useRefreshFamilyData } from '../workflows/common';
+import { useOffline } from '../offline/OfflineProvider';
+import { familyDate } from '../offline/cache';
+import { QuestykTaskHelp } from '../ai/QuestykLauncher';
+import { Feedback, QueryState } from '../workflows/common';
 
 function calendarDate(value: string) {
   return new Intl.DateTimeFormat('uk-UA', {
@@ -47,7 +50,12 @@ export function TaskList({
   const query = useQuery({ queryKey: ['tasks'], queryFn: () => api<TaskDto[]>('/tasks') });
   return (
     <>
-      <QueryState pending={query.isPending} error={query.error} retry={query.refetch} />
+      <QueryState
+        hasData={!parent && query.data !== undefined}
+        pending={query.isPending}
+        error={query.error}
+        retry={query.refetch}
+      />
       {query.data && !query.data.length && (
         <div className="empty-state">
           <span className="empty-art">
@@ -80,24 +88,21 @@ function TaskCard({
   const [open, setOpen] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [fileError, setFileError] = useState('');
-  const operation = useOperationId();
-  const refresh = useRefreshFamilyData();
-  const online = useOnline();
+  const offline = useOffline();
+  const today = familyDate(offline.timeZone);
+  const queued = offline.pending.find(
+    (item) =>
+      item.taskId === task.id && (task.repeatDaily === false || item.completionDate === today),
+  );
   const completion = task.todayCompletion;
   const status = completion?.status || 'PENDING';
-  const maySubmit = status === 'PENDING' || status === 'REJECTED';
+  const maySubmit = !queued && (status === 'PENDING' || status === 'REJECTED');
   const mutation = useMutation({
-    mutationFn: async () => {
-      const form = new FormData();
-      form.set('operationId', operation.current());
-      files.forEach((file) => form.append('photos', file));
-      return api(`/tasks/${task.id}/submit`, { method: 'POST', body: form });
-    },
-    onSuccess: async () => {
-      operation.renew();
+    networkMode: 'always',
+    mutationFn: () => offline.queueTask(task, files),
+    onSuccess: () => {
       setFiles([]);
       setOpen(false);
-      await refresh();
     },
   });
   function validateFiles(selected: File[]) {
@@ -132,9 +137,21 @@ function TaskCard({
             {task.isActive ? uk.active : uk.inactive}
           </span>
         ) : (
-          <span className={`status-chip ${status.toLowerCase()}`}>
-            {status === 'APPROVED' && <CheckCircle2 size={15} />}
-            {uk.taskStates[status]}
+          <span
+            className={`status-chip ${queued ? (queued.status === 'FAILED' ? 'queue-failed' : 'queued') : status.toLowerCase()}`}
+          >
+            {queued ? (
+              <CloudUpload size={15} />
+            ) : (
+              status === 'APPROVED' && <CheckCircle2 size={15} />
+            )}
+            {queued
+              ? queued.status === 'FAILED'
+                ? uk.taskQueueFailed
+                : queued.status === 'SENDING'
+                  ? uk.taskQueueSending
+                  : uk.taskQueued
+              : uk.taskStates[status]}
           </span>
         )}
         {task.isRequired && <span className="metadata">{uk.requiredBadge}</span>}
@@ -171,15 +188,27 @@ function TaskCard({
         </div>
       ) : (
         <>
+          <QuestykTaskHelp taskId={task.id} />
           <Feedback
             error={mutation.error}
-            success={mutation.isSuccess && status === 'SUBMITTED' ? uk.taskSubmitted : undefined}
+            success={
+              mutation.isSuccess
+                ? queued
+                  ? uk.taskQueuedHint
+                  : status === 'SUBMITTED'
+                    ? uk.taskSubmitted
+                    : undefined
+                : undefined
+            }
           />
+          {maySubmit && offline.ready && !offline.available && (
+            <p className="field-hint">{uk.taskQueueStorageHint}</p>
+          )}
           {maySubmit && !open && (
             <button
               type="button"
               className="button primary"
-              disabled={!online}
+              disabled={!offline.ready || !offline.available}
               onClick={() => {
                 setOpen(true);
                 mutation.reset();
@@ -226,9 +255,12 @@ function TaskCard({
                 </p>
               )}
               <div className="workflow-actions">
-                <button className="button primary" disabled={mutation.isPending || !online}>
+                <button
+                  className="button primary"
+                  disabled={mutation.isPending || !offline.ready || !offline.available}
+                >
                   <Send size={17} />
-                  {mutation.isPending ? uk.wait : uk.submitTask}
+                  {mutation.isPending ? uk.wait : uk.taskQueueSubmit}
                 </button>
                 <button
                   type="button"

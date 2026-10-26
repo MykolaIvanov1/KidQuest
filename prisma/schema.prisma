@@ -44,22 +44,31 @@ enum RewardRequestStatus {
   REJECTED
 }
 
+enum PushDeliveryStatus {
+  PENDING
+  PROCESSING
+  SENT
+  FAILED
+  CANCELLED
+}
+
 model Family {
-  id          String             @id @default(uuid()) @db.Uuid
-  name        String             @db.VarChar(120)
-  timeZone    String             @default("Europe/Kyiv") @db.VarChar(80)
-  createdAt   DateTime           @default(now()) @db.Timestamptz(3)
-  updatedAt   DateTime           @updatedAt @db.Timestamptz(3)
-  deletedAt   DateTime?          @db.Timestamptz(3)
-  users       User[]
-  children    Child[]
-  categories  TaskCategory[]
-  tasks       Task[]
-  completions TaskCompletion[]
-  points      PointTransaction[]
-  rewards     Reward[]
-  requests    RewardRequest[]
-  auditLogs   AuditLog[]
+  id            String                @id @default(uuid()) @db.Uuid
+  name          String                @db.VarChar(120)
+  timeZone      String                @default("Europe/Kyiv") @db.VarChar(80)
+  createdAt     DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime              @updatedAt @db.Timestamptz(3)
+  deletedAt     DateTime?             @db.Timestamptz(3)
+  users         User[]
+  children      Child[]
+  categories    TaskCategory[]
+  tasks         Task[]
+  completions   TaskCompletion[]
+  points        PointTransaction[]
+  rewards       Reward[]
+  requests      RewardRequest[]
+  auditLogs     AuditLog[]
+  taskSchedules TaskScheduleVersion[]
 }
 
 model User {
@@ -67,6 +76,7 @@ model User {
   familyId     String    @db.Uuid
   email        String    @unique @db.VarChar(254)
   passwordHash String    @db.VarChar(100)
+  authVersion  Int       @default(0)
   firstName    String    @db.VarChar(80)
   lastName     String    @default("") @db.VarChar(80)
   role         Role
@@ -133,32 +143,53 @@ model TaskCategory {
 }
 
 model Task {
-  id            String           @id @default(uuid()) @db.Uuid
-  familyId      String           @db.Uuid
-  categoryId    String           @db.Uuid
-  title         String           @db.VarChar(160)
-  description   String           @default("")
-  icon          String           @default("ListTodo") @db.VarChar(60)
-  color         String           @default("primary") @db.VarChar(30)
+  id            String                @id @default(uuid()) @db.Uuid
+  familyId      String                @db.Uuid
+  categoryId    String                @db.Uuid
+  title         String                @db.VarChar(160)
+  description   String                @default("")
+  icon          String                @default("ListTodo") @db.VarChar(60)
+  color         String                @default("primary") @db.VarChar(30)
   points        Int
-  isRequired    Boolean          @default(false)
-  repeatDaily   Boolean          @default(true)
-  photoRequired Boolean          @default(false)
-  startDate     DateTime?        @db.Date
-  endDate       DateTime?        @db.Date
-  startTime     String?          @db.VarChar(5)
-  endTime       String?          @db.VarChar(5)
-  isActive      Boolean          @default(true)
-  createdAt     DateTime         @default(now()) @db.Timestamptz(3)
-  updatedAt     DateTime         @updatedAt @db.Timestamptz(3)
-  deletedAt     DateTime?        @db.Timestamptz(3)
-  family        Family           @relation(fields: [familyId], references: [id], onDelete: Restrict)
-  category      TaskCategory     @relation(fields: [categoryId, familyId], references: [id, familyId], onDelete: Restrict)
+  isRequired    Boolean               @default(false)
+  repeatDaily   Boolean               @default(true)
+  photoRequired Boolean               @default(false)
+  startDate     DateTime?             @db.Date
+  endDate       DateTime?             @db.Date
+  startTime     String?               @db.VarChar(5)
+  endTime       String?               @db.VarChar(5)
+  isActive      Boolean               @default(true)
+  createdAt     DateTime              @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime              @updatedAt @db.Timestamptz(3)
+  deletedAt     DateTime?             @db.Timestamptz(3)
+  family        Family                @relation(fields: [familyId], references: [id], onDelete: Restrict)
+  category      TaskCategory          @relation(fields: [categoryId, familyId], references: [id, familyId], onDelete: Restrict)
   completions   TaskCompletion[]
+  schedules     TaskScheduleVersion[]
 
   @@unique([id, familyId])
   @@index([familyId, isActive, deletedAt])
   @@index([categoryId])
+}
+
+// A date-effective schedule preserves past required quests when parents edit them.
+model TaskScheduleVersion {
+  id            String    @id @default(uuid()) @db.Uuid
+  taskId        String    @db.Uuid
+  familyId      String    @db.Uuid
+  effectiveFrom DateTime  @db.Date
+  title         String    @db.VarChar(160)
+  isRequired    Boolean
+  repeatDaily   Boolean
+  isActive      Boolean
+  startDate     DateTime? @db.Date
+  endDate       DateTime? @db.Date
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  task          Task      @relation(fields: [taskId, familyId], references: [id, familyId], onDelete: Restrict)
+  family        Family    @relation(fields: [familyId], references: [id], onDelete: Restrict)
+
+  @@unique([taskId, effectiveFrom])
+  @@index([familyId, effectiveFrom])
 }
 
 model TaskCompletion {
@@ -309,6 +340,7 @@ model UserAchievement {
 model Notification {
   id        String    @id @default(uuid()) @db.Uuid
   userId    String    @db.Uuid
+  eventKey  String?   @db.VarChar(220)
   type      String    @db.VarChar(80)
   title     String    @db.VarChar(160)
   body      String
@@ -317,7 +349,9 @@ model Notification {
   createdAt DateTime  @default(now()) @db.Timestamptz(3)
   deletedAt DateTime? @db.Timestamptz(3)
   user      User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deliveries PushDelivery[]
 
+  @@unique([userId, eventKey])
   @@index([userId, readAt, createdAt])
 }
 
@@ -332,6 +366,7 @@ model LoginLog {
   user      User?    @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([userId, loginAt])
+  @@index([userId, loginAt, id])
   @@index([success, loginAt])
 }
 
@@ -352,6 +387,7 @@ model AuditLog {
 }
 
 model RefreshToken {
+  authVersion  Int           @default(0)
   id           String        @id @default(uuid()) @db.Uuid
   userId       String        @db.Uuid
   tokenHash    String        @unique @db.VarChar(64)
@@ -375,11 +411,37 @@ model Device {
   token      String    @unique
   name       String?   @db.VarChar(120)
   platform   String?   @db.VarChar(40)
+  bindingVersion Int   @default(1)
   lastSeenAt DateTime  @default(now()) @db.Timestamptz(3)
   createdAt  DateTime  @default(now()) @db.Timestamptz(3)
   updatedAt  DateTime  @updatedAt @db.Timestamptz(3)
   deletedAt  DateTime? @db.Timestamptz(3)
   user       User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  deliveries PushDelivery[]
 
   @@index([userId, deletedAt])
+}
+
+// Each device receives a separately leased attempt. Tokens stay on Device, never in logs/payloads.
+model PushDelivery {
+  id              String             @id @default(uuid()) @db.Uuid
+  notificationId  String             @db.Uuid
+  deviceId        String             @db.Uuid
+  deviceVersion   Int
+  status          PushDeliveryStatus @default(PENDING)
+  attempts        Int                @default(0)
+  nextAttemptAt   DateTime           @default(now()) @db.Timestamptz(3)
+  leaseToken      String?            @db.Uuid
+  leaseUntil      DateTime?          @db.Timestamptz(3)
+  lastErrorCode   String?            @db.VarChar(80)
+  sentAt          DateTime?          @db.Timestamptz(3)
+  createdAt       DateTime           @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime           @updatedAt @db.Timestamptz(3)
+  notification    Notification       @relation(fields: [notificationId], references: [id], onDelete: Restrict)
+  device          Device             @relation(fields: [deviceId], references: [id], onDelete: Restrict)
+
+  @@unique([notificationId, deviceId])
+  @@index([status, nextAttemptAt])
+  @@index([status, leaseUntil])
+  @@index([deviceId, status])
 }

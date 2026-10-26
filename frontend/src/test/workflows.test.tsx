@@ -15,9 +15,36 @@ import type {
 import { AuthProvider } from '../app/providers/AuthProvider';
 import { ThemeProvider } from '../app/providers/ThemeProvider';
 import { Router } from '../app/router/Router';
-import { setAccessToken } from '../services/api';
+import { resetApiSession } from '../services/api';
 import { uk } from '../lib/i18n';
 
+const workflowOffline = vi.hoisted(() => ({
+  ready: true,
+  available: true,
+  timeZone: 'UTC',
+  cachedAt: null,
+  pending: [] as Array<{
+    operationId: string;
+    taskId: string;
+    taskTitle: string;
+    completedAt: string;
+    completionDate: string;
+    status: 'PENDING';
+    attempts: number;
+    nextAttemptAt: number;
+    errorCode: null;
+    errorMessage: null;
+  }>,
+  syncing: false,
+  queueTask: vi.fn(),
+  retry: vi.fn(),
+  discard: vi.fn(),
+  sync: vi.fn(),
+}));
+vi.mock('../features/offline/OfflineProvider', () => ({
+  useOffline: () => workflowOffline,
+  OfflineProvider: ({ children }: { children: React.ReactNode }) => children,
+}));
 const category = {
   id: '11111111-1111-4111-8111-111111111111',
   name: 'Дім',
@@ -26,6 +53,7 @@ const category = {
 };
 const task: TaskDto = {
   id: '22222222-2222-4222-8222-222222222222',
+  updatedAt: '2026-10-21T09:00:00Z',
   title: 'Прибрати кімнату',
   description: 'Поклади іграшки на місце',
   categoryId: category.id,
@@ -334,7 +362,10 @@ beforeAll(async () => {
   Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() });
 });
 beforeEach(() => {
-  setAccessToken(null);
+  resetApiSession();
+  localStorage.clear();
+  workflowOffline.pending = [];
+  workflowOffline.queueTask.mockReset().mockResolvedValue(undefined);
 });
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -574,30 +605,40 @@ describe('Quest and reward workflows', () => {
     ).toBe(true);
   });
 
-  it('requires a photo and preserves operationId when a failed submission is retried', async () => {
-    const { state, fetchMock } = mockWorkflows({ failFirstSubmit: true });
+  it('requires a photo and queues one durable completion without changing server state or points', async () => {
+    const { state, fetchMock } = mockWorkflows();
+    workflowOffline.queueTask.mockImplementation(async (selectedTask: TaskDto) => {
+      workflowOffline.pending = [
+        {
+          operationId: 'saved-operation',
+          taskId: selectedTask.id,
+          taskTitle: selectedTask.title,
+          completedAt: new Date().toISOString(),
+          completionDate: new Date().toISOString().slice(0, 10),
+          status: 'PENDING',
+          attempts: 0,
+          nextAttemptAt: 0,
+          errorCode: null,
+          errorMessage: null,
+        },
+      ];
+    });
     const user = userEvent.setup();
     renderWorkflow('/child/adventure');
     await user.click(await screen.findByRole('button', { name: uk.completeTask }));
-    await user.click(screen.getByRole('button', { name: uk.submitTask }));
+    await user.click(screen.getByRole('button', { name: uk.taskQueueSubmit }));
     expect(await screen.findByText(uk.photoRequiredError)).toBeInTheDocument();
-    await user.upload(
-      screen.getByLabelText(/Фото виконання/),
-      new File(['test-image'], 'room.jpg', { type: 'image/jpeg' }),
-    );
-    await user.click(screen.getByRole('button', { name: uk.submitTask }));
-    expect(await screen.findByText(uk.genericError)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: uk.submitTask }));
-    expect(await screen.findByText(uk.taskStates.SUBMITTED)).toBeInTheDocument();
+    expect(workflowOffline.queueTask).not.toHaveBeenCalled();
+    const photo = new File(['test-image'], 'room.jpg', { type: 'image/jpeg' });
+    await user.upload(screen.getByLabelText(/Фото виконання/), photo);
+    await user.click(screen.getByRole('button', { name: uk.taskQueueSubmit }));
+    expect(await screen.findByText(uk.taskQueued)).toBeInTheDocument();
+    expect(workflowOffline.queueTask).toHaveBeenCalledWith(task, [photo]);
+    expect(screen.queryByRole('button', { name: uk.completeTask })).not.toBeInTheDocument();
+    expect(state.tasks[0]!.todayCompletion).toBeNull();
     expect(state.balance).toBe(0);
-    const calls = fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/submit'));
-    expect(calls).toHaveLength(2);
-    const first = calls[0]![1]!.body as FormData;
-    const second = calls[1]![1]!.body as FormData;
-    expect(first.get('operationId')).toBe(second.get('operationId'));
-    expect(first.getAll('photos')).toHaveLength(1);
+    expect(fetchMock.mock.calls.filter(([url]) => String(url).endsWith('/submit'))).toHaveLength(0);
   });
-
   it('loads multiple private photos with authorization and approves a submitted quest', async () => {
     const { state, fetchMock } = mockWorkflows({ role: 'PARENT', pendingCompletion: true });
     const user = userEvent.setup();
@@ -605,7 +646,7 @@ describe('Quest and reward workflows', () => {
     const heading = await screen.findByRole('heading', { name: uk.taskReview });
     const panel = heading.closest('section')!;
     await user.click(await within(panel).findByRole('button', { name: /Переглянути фото/ }));
-    expect(await within(panel).findAllByRole('img')).toHaveLength(2);
+    await waitFor(() => expect(within(panel).getAllByRole('img')).toHaveLength(2));
     const photoCall = fetchMock.mock.calls.find(([url]) => String(url).includes('/task-photos/'))!;
     expect(new Headers(photoCall[1]?.headers).get('Authorization')).toBe('Bearer workflow-access');
     await user.click(within(panel).getByRole('button', { name: uk.approve }));

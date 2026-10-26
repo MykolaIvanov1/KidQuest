@@ -11,6 +11,29 @@ export interface AuthSession {
   accessToken: string;
   user: PublicUser;
 }
+export interface AccountProfileData {
+  user: PublicUser;
+  family: { id: string; name: string; timeZone: string };
+  childId: string | null;
+  createdAt: string;
+}
+export interface AccountMutationData {
+  updated: boolean;
+  reauthenticate: boolean;
+}
+export interface LoginLogDto {
+  id: string;
+  user: PublicUser;
+  loginAt: string;
+  ipAddress: string | null;
+  userAgent: string | null;
+  device: string | null;
+  success: boolean;
+}
+export interface LoginJournalData {
+  items: LoginLogDto[];
+  nextCursor: string | null;
+}
 export type ApiResponse<T> =
   | { success: true; data: T }
   | { success: false; error: { code: string; message: string; details?: unknown[] } };
@@ -36,6 +59,78 @@ export interface DashboardData {
   rewards: { id: string; title: string; description: string | null; cost: number; type: string }[];
   today: { approved: number; total: number };
   streak: number | null;
+  gamification?: GamificationSummary;
+}
+
+export interface AchievementDto {
+  id: string;
+  code: string;
+  title: string;
+  description: string;
+  icon: string;
+  type: 'STREAK' | 'APPROVED_TASKS' | 'EARNED_POINTS';
+  target: number;
+  progress: number;
+  earnedAt: string | null;
+}
+export interface GamificationSummary {
+  childId: string | null;
+  timeZone: string;
+  today: string;
+  trackingFrom: string | null;
+  streak: number;
+  bestStreak: number;
+  approvedTasks: number;
+  earnedPoints: number;
+  nextAchievement: AchievementDto | null;
+}
+export interface AchievementsData {
+  child: { id: string; firstName: string } | null;
+  summary: GamificationSummary;
+  achievements: AchievementDto[];
+}
+export interface CalendarTaskDto {
+  taskId: string;
+  title: string;
+  isRequired: boolean;
+  status: CompletionStatus;
+  completionId: string | null;
+  points: number;
+}
+export interface CalendarDayDto {
+  date: string;
+  status: 'COMPLETE' | 'PARTIAL' | 'PENDING' | 'MISSED' | 'EMPTY' | 'FUTURE';
+  expected: number;
+  required: number;
+  approved: number;
+  submitted: number;
+  rejected: number;
+  missed: number;
+  earnedPoints: number;
+  successful: boolean;
+  tasks: CalendarTaskDto[];
+}
+export interface CalendarData {
+  child: { id: string; firstName: string } | null;
+  timeZone: string;
+  today: string;
+  month: string;
+  trackingFrom: string | null;
+  days: CalendarDayDto[];
+  summary: {
+    approved: number;
+    submitted: number;
+    rejected: number;
+    missed: number;
+    earnedPoints: number;
+    successfulDays: number;
+  };
+}
+export interface ProgressData extends CalendarData {
+  streak: number;
+  bestStreak: number;
+  lifetimeApprovedTasks: number;
+  lifetimeEarnedPoints: number;
 }
 
 export type CompletionStatus = 'PENDING' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'MISSED';
@@ -72,6 +167,7 @@ export interface TaskCompletionDto {
 }
 export interface TaskDto {
   id: string;
+  updatedAt: string;
   title: string;
   description: string;
   categoryId: string;
@@ -129,3 +225,45 @@ export interface PointTransactionDto {
 export type CompletionDto = TaskCompletionDto;
 export type CategoryDto = TaskCategoryDto;
 export type PhotoDto = TaskPhotoDto;
+export interface NotificationDto {
+  id: string;
+  type: string;
+  title: string;
+  body: string;
+  path: string;
+  readAt: string | null;
+  createdAt: string;
+}
+
+export interface NotificationsData {
+  items: NotificationDto[];
+  unreadCount: number;
+  nextCursor: string | null;
+}
+
+export interface NotificationStatusData {
+  pushConfigured: boolean;
+}
+
+export interface DeviceDto {
+  id: string;
+  name: string | null;
+  platform: string | null;
+  lastSeenAt: string;
+}
+
+export type AiIntent =
+  'GREETING' | 'MOTIVATE' | 'PRAISE' | 'TASK_HELP' | 'PROGRESS' | 'QUEST_IDEAS' | 'REWARD_IDEAS';
+export interface AiRequest {
+  intent: AiIntent;
+  taskId?: string;
+  childId?: string;
+}
+export interface AiAdvice {
+  intent: AiIntent;
+  message: string;
+  tips: string[];
+  source: 'LOCAL' | 'AI';
+  reason: 'LOCAL_MODE' | 'PROVIDER_UNAVAILABLE' | null;
+  generatedAt: string;
+}

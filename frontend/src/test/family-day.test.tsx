@@ -24,7 +24,16 @@ const dashboard: DashboardData = {
   today: { approved: 0, total: 1 },
   streak: null,
 };
-const familyQueries = ['tasks', 'dashboard', 'completions', 'points', 'point-history'];
+const familyQueries = [
+  'tasks',
+  'dashboard',
+  'completions',
+  'points',
+  'point-history',
+  'achievements',
+  'calendar',
+  'progress',
+];
 const clients: QueryClient[] = [];
 
 function mountRefresh() {

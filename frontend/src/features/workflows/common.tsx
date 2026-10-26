@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, CheckCircle2 } from 'lucide-react';
 import { uk } from '../../lib/i18n';
+import { isConnectionFailure } from '../../services/api';
 
 export function useOperationId() {
   const operation = useRef(crypto.randomUUID());
@@ -26,6 +27,10 @@ export function useRefreshFamilyData() {
         'reward-requests',
         'points',
         'point-history',
+        'achievements',
+        'calendar',
+        'progress',
+        'notifications',
       ].map((key) => client.invalidateQueries({ queryKey: [key] })),
     );
   };
@@ -35,10 +40,12 @@ export function QueryState({
   pending,
   error,
   retry,
+  hasData = false,
 }: {
   pending: boolean;
   error: Error | null;
   retry: () => unknown;
+  hasData?: boolean;
 }) {
   if (pending)
     return (
@@ -47,7 +54,7 @@ export function QueryState({
         {uk.loading}
       </p>
     );
-  if (error)
+  if (error && !(hasData && isConnectionFailure(error)))
     return (
       <div className="form-error" role="alert">
         <AlertCircle size={18} />

@@ -8,7 +8,10 @@ export class FamilyService {
 
   async createMember(user: UserRecord, input: MemberInput) {
     const hash = await bcrypt.hash(input.password, 12);
-    const member = await this.repository.createMember(user.familyId, input, hash);
+    const member = await this.repository.createMember(user.familyId, input, hash, {
+      id: user.id,
+      authVersion: user.authVersion,
+    });
     logger.info('family.member_created', { userId: member.id, familyId: user.familyId });
     return member;
   }

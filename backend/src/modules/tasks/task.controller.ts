@@ -49,12 +49,7 @@ export class TaskController {
     const files = (req.files ?? []) as Express.Multer.File[];
     res.json({
       success: true,
-      data: await this.service.submit(
-        req.authUser!,
-        z.uuid().parse(req.params.id),
-        input.operationId,
-        files,
-      ),
+      data: await this.service.submit(req.authUser!, z.uuid().parse(req.params.id), input, files),
     });
   };
 }

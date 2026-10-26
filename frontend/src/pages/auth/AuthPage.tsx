@@ -19,8 +19,12 @@ import { ThemeButton } from '../../components/ui/ThemeButton';
 import { useOnline } from '../../hooks/useOnline';
 
 export default function AuthPage() {
-  const registerMode = useLocation().pathname === '/register';
-  const { user, establish } = useAuth();
+  const location = useLocation();
+  const registerMode = location.pathname === '/register';
+  const { user, establish, accountChanged: sessionAccountChanged } = useAuth();
+  const accountChanged =
+    sessionAccountChanged ||
+    (location.state as { accountChanged?: boolean } | null)?.accountChanged === true;
   if (user) return <Navigate to={user.role === 'PARENT' ? '/parent' : '/child'} replace />;
   return (
     <div className="auth-page">
@@ -74,6 +78,11 @@ export default function AuthPage() {
           <span className="section-label">{registerMode ? uk.familyAccount : uk.app}</span>
           <h2>{registerMode ? uk.registerTitle : uk.welcome}</h2>
           <p className="muted">{registerMode ? uk.registerLead : uk.loginLead}</p>
+          {accountChanged && (
+            <p className="success-message" role="status">
+              {uk.accountSignInAgain}
+            </p>
+          )}
           {registerMode ? <RegisterForm /> : <LoginForm />}
           <p className="auth-switch">
             {registerMode ? uk.haveAccount : uk.noAccount}{' '}
@@ -101,7 +110,7 @@ export default function AuthPage() {
         onSubmit={handleSubmit(async (data) => {
           setError('');
           try {
-            establish(
+            await establish(
               await api<AuthSession>('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
             );
           } catch (failure) {
@@ -157,7 +166,7 @@ export default function AuthPage() {
         onSubmit={handleSubmit(async (data) => {
           setError('');
           try {
-            establish(
+            await establish(
               await api<AuthSession>('/auth/register', {
                 method: 'POST',
                 body: JSON.stringify(data),

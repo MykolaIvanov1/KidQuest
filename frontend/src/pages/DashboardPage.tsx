@@ -20,12 +20,13 @@ import type { DashboardData, PublicUser } from '@kidquest/types';
 import { useAuth } from '../app/providers/AuthProvider';
 import { AppShell } from '../components/layout/AppShell';
 import { MemberForm } from '../features/auth/MemberForm';
-import { api } from '../services/api';
+import { api, isConnectionFailure } from '../services/api';
 import { uk } from '../lib/i18n';
 import { LOCALE } from '@kidquest/shared';
 import { TaskList } from '../features/quests/TaskList';
 import { TaskReviews, RewardRequests } from '../features/workflows/Reviews';
 import { PointsHistory } from '../features/points/PointsHistory';
+import { QuestykCard } from '../features/ai/QuestykLauncher';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -70,7 +71,7 @@ export default function DashboardPage() {
           {uk.loading}
         </div>
       )}
-      {query.isError && (
+      {query.isError && (parent || data === undefined || !isConnectionFailure(query.error)) && (
         <div className="error-card" role="alert">
           <h2>{uk.errorTitle}</h2>
           <p>{query.error.message}</p>
@@ -131,7 +132,7 @@ export default function DashboardPage() {
                   icon={<Flame size={23} />}
                   tone="peach"
                   label={uk.streak}
-                  value={data.streak ?? '—'}
+                  value={data.streak ?? 0}
                 />
                 <Stat
                   icon={<Check size={23} />}
@@ -251,6 +252,10 @@ export default function DashboardPage() {
               )}
             </div>
             <div className="side-column">
+              <QuestykCard
+                role={parent ? 'PARENT' : 'CHILD'}
+                childId={parent ? data.child?.id : undefined}
+              />
               <section className="panel reward-panel">
                 <div className="panel-heading">
                   <div>
@@ -298,13 +303,51 @@ export default function DashboardPage() {
                   <Trophy size={27} />
                 </span>
                 <p className="section-label">{uk.nextAchievement}</p>
-                <h3>{uk.achievementTitle}</h3>
-                <p>{uk.achievementLead}</p>
+                {data.gamification?.nextAchievement ? (
+                  <>
+                    <h3>{data.gamification.nextAchievement.title}</h3>
+                    <p>{data.gamification.nextAchievement.description}</p>
+                    <div className="achievement-meter">
+                      <progress
+                        aria-label={data.gamification.nextAchievement.title}
+                        max={data.gamification.nextAchievement.target}
+                        value={Math.min(
+                          data.gamification.nextAchievement.progress,
+                          data.gamification.nextAchievement.target,
+                        )}
+                      />
+                      <strong>
+                        {uk.achievementProgress(
+                          Math.min(
+                            data.gamification.nextAchievement.progress,
+                            data.gamification.nextAchievement.target,
+                          ),
+                          data.gamification.nextAchievement.target,
+                        )}
+                      </strong>
+                    </div>
+                  </>
+                ) : data.gamification?.childId ? (
+                  <>
+                    <h3>{uk.allAchievementsEarned}</h3>
+                    <p>{uk.allAchievementsLead}</p>
+                  </>
+                ) : (
+                  <p>{data.child ? uk.nextAchievementLead : uk.noChildProgress}</p>
+                )}
+                {data.child && (
+                  <Link
+                    className="text-button achievement-link"
+                    to={parent ? '/parent/achievements' : '/child/achievements'}
+                  >
+                    {uk.viewAchievements}
+                  </Link>
+                )}
               </section>
               {!parent && (
                 <p className="subtle-note">
                   <Flame size={16} />
-                  {uk.streakLater}
+                  {uk.streakHint}
                 </p>
               )}
             </div>

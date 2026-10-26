@@ -42,7 +42,7 @@ export class AuthService {
 
   private access(user: UserRecord): AuthSession {
     return {
-      accessToken: jwt.sign({}, this.config.jwtSecret, {
+      accessToken: jwt.sign({ ver: user.authVersion }, this.config.jwtSecret, {
         algorithm: 'HS256',
         subject: user.id,
         issuer: ISSUER,
@@ -53,13 +53,14 @@ export class AuthService {
     };
   }
 
-  private newRefresh(userId: string, sessionId: string = randomUUID()) {
+  private newRefresh(userId: string, authVersion: number, sessionId: string = randomUUID()) {
     const raw = randomBytes(48).toString('base64url');
     return {
       raw,
       record: {
         userId,
         sessionId,
+        authVersion,
         tokenHash: digest(raw),
         expiresAt: new Date(Date.now() + this.config.refreshDays * 86_400_000),
       },
@@ -67,7 +68,8 @@ export class AuthService {
   }
 
   private async session(user: UserRecord) {
-    const refresh = this.newRefresh(user.id);
+    // Keep the password-verified snapshot's version even if a security change races this login.
+    const refresh = this.newRefresh(user.id, user.authVersion);
     await this.repository.createRefresh(refresh.record);
     return { session: this.access(user), refreshToken: refresh.raw };
   }
@@ -104,6 +106,7 @@ export class AuthService {
 
   async authenticate(accessToken: string): Promise<UserRecord> {
     let subject: string;
+    let version: number;
     try {
       const payload = jwt.verify(accessToken, this.config.jwtSecret, {
         algorithms: ['HS256'],
@@ -112,11 +115,17 @@ export class AuthService {
       });
       if (typeof payload === 'string' || typeof payload.sub !== 'string') throw invalidSession();
       subject = payload.sub;
+      // Existing access tokens predate versioning and belong to version zero only.
+      const claim: unknown = payload.ver === undefined ? 0 : payload.ver;
+      if (typeof claim !== 'number' || !Number.isSafeInteger(claim) || claim < 0)
+        throw invalidSession();
+      version = claim;
     } catch {
       throw invalidSession();
     }
     const user = await this.repository.findById(subject);
     this.active(user);
+    if (user.authVersion !== version) throw invalidSession();
     return user;
   }
 
@@ -132,7 +141,11 @@ export class AuthService {
     if (old.expiresAt <= new Date()) throw invalidSession();
     const user = await this.repository.findById(old.userId);
     this.active(user);
-    const next = this.newRefresh(user.id, old.sessionId);
+    if (old.authVersion !== user.authVersion) {
+      await this.repository.revokeSession(old.sessionId);
+      throw invalidSession();
+    }
+    const next = this.newRefresh(user.id, old.authVersion, old.sessionId);
     if (!(await this.repository.rotateRefresh(old.id, next.record))) {
       await this.repository.revokeSession(old.sessionId);
       throw invalidSession();

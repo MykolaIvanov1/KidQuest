@@ -64,12 +64,27 @@ export default function RewardsPage() {
         />
       )}
       <Feedback error={remove.error} success={remove.isSuccess ? uk.deleted : undefined} />
-      <QueryState pending={query.isPending} error={query.error} retry={query.refetch} />
+      <QueryState
+        hasData={!parent && query.data !== undefined}
+        pending={query.isPending}
+        error={query.error}
+        retry={query.refetch}
+      />
       {!parent && (
-        <QueryState pending={points.isPending} error={points.error} retry={points.refetch} />
+        <QueryState
+          hasData={points.data !== undefined}
+          pending={points.isPending}
+          error={points.error}
+          retry={points.refetch}
+        />
       )}
       {!parent && (
-        <QueryState pending={requests.isPending} error={requests.error} retry={requests.refetch} />
+        <QueryState
+          hasData={requests.data !== undefined}
+          pending={requests.isPending}
+          error={requests.error}
+          retry={requests.refetch}
+        />
       )}
       {query.data && !query.data.length && (
         <div className="empty-state panel">

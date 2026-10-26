@@ -42,6 +42,26 @@ export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
 export type MemberInput = z.infer<typeof memberSchema>;
 
+const currentPasswordSchema = z
+  .string()
+  .min(1, 'Введіть поточний пароль')
+  .max(200, 'Пароль занадто довгий');
+export const changeEmailSchema = z
+  .object({ email: emailSchema, currentPassword: currentPasswordSchema })
+  .strict();
+export const resetChildPasswordSchema = z
+  .object({ currentPassword: currentPasswordSchema, newPassword: passwordSchema })
+  .strict();
+export const changeRoleSchema = z
+  .object({
+    role: z.enum(['PARENT', 'CHILD'], { error: 'Оберіть роль: батьки або дитина' }),
+    currentPassword: currentPasswordSchema,
+  })
+  .strict();
+export type ChangeEmailInput = z.infer<typeof changeEmailSchema>;
+export type ResetChildPasswordInput = z.infer<typeof resetChildPasswordSchema>;
+export type ChangeRoleInput = z.infer<typeof changeRoleSchema>;
+
 export const idSchema = z.uuid('Некоректний ідентифікатор');
 const titleSchema = z.string().trim().min(1, 'Вкажіть назву').max(160, 'Максимум 160 символів');
 const descriptionSchema = z.string().trim().max(2000, 'Максимум 2000 символів');
@@ -110,7 +130,17 @@ export const categorySchema = z
     color: colorSchema.optional(),
   })
   .strict();
-export const submitTaskSchema = z.object({ operationId: idSchema }).strict();
+export const submitTaskSchema = z
+  .object({
+    operationId: idSchema,
+    completedAt: z.iso.datetime({ offset: true }).optional(),
+    taskVersion: z.iso.datetime({ offset: true }).optional(),
+  })
+  .strict()
+  .refine((input) => Boolean(input.completedAt) === Boolean(input.taskVersion), {
+    message: 'Час офлайн-виконання та версію квесту потрібно передати разом',
+    path: ['completedAt'],
+  });
 export const reviewSchema = z
   .object({ reason: z.string().trim().max(1000, 'Максимум 1000 символів').optional() })
   .strict();
@@ -148,3 +178,40 @@ export type CompletionReviewInput = z.infer<typeof completionReviewSchema>;
 export type RewardInput = z.infer<typeof rewardSchema>;
 export type RewardUpdateInput = z.infer<typeof rewardUpdateSchema>;
 export type RewardRequestInput = z.infer<typeof rewardRequestSchema>;
+
+export const aiIntents = [
+  'GREETING',
+  'MOTIVATE',
+  'PRAISE',
+  'TASK_HELP',
+  'PROGRESS',
+  'QUEST_IDEAS',
+  'REWARD_IDEAS',
+] as const;
+export const aiAdviceSchema = z
+  .object({
+    intent: z.enum(aiIntents, { error: 'Оберіть, із чим допомогти.' }),
+    taskId: idSchema.optional(),
+    childId: idSchema.optional(),
+  })
+  .strict()
+  .superRefine((input, context) => {
+    if ((input.intent === 'TASK_HELP') !== (input.taskId !== undefined)) {
+      context.addIssue({
+        code: 'custom',
+        path: ['taskId'],
+        message: 'Квест потрібно обрати лише для підказки до завдання.',
+      });
+    }
+    if (
+      input.childId !== undefined &&
+      !['PROGRESS', 'QUEST_IDEAS', 'REWARD_IDEAS'].includes(input.intent)
+    ) {
+      context.addIssue({
+        code: 'custom',
+        path: ['childId'],
+        message: 'Вибір дитини доступний лише для батьківських підказок.',
+      });
+    }
+  });
+export type AiAdviceInput = z.infer<typeof aiAdviceSchema>;

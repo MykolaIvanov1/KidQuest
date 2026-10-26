@@ -7,7 +7,7 @@ import type { AuthSession, DashboardData, PublicUser } from '@kidquest/types';
 import { AuthProvider } from '../app/providers/AuthProvider';
 import { ThemeProvider } from '../app/providers/ThemeProvider';
 import { Router } from '../app/router/Router';
-import { setAccessToken } from '../services/api';
+import { resetApiSession } from '../services/api';
 import { uk } from '../lib/i18n';
 
 const parent: PublicUser = {
@@ -109,6 +109,7 @@ function mockServer({
           endTime: null,
           startDate: null,
           endDate: null,
+          updatedAt: '2026-10-21T09:00:00Z',
           todayCompletion: null,
         })),
       );
@@ -164,7 +165,8 @@ beforeAll(async () => {
 });
 
 beforeEach(() => {
-  setAccessToken(null);
+  resetApiSession();
+  localStorage.clear();
   localStorage.clear();
 });
 afterEach(() => {
@@ -275,7 +277,9 @@ describe('Role-specific dashboards', () => {
     expect(await screen.findByRole('heading', { name: /Привіт, Богдан!/ })).toBeInTheDocument();
     expect(await screen.findByText(dashboard.tasks[0]!.title)).toBeInTheDocument();
     expect(screen.getByText('25%')).toBeInTheDocument();
-    expect(screen.getByText(uk.streakLater)).toBeInTheDocument();
+    const streak = screen.getByText(uk.streak).closest('.stat-card')!;
+    expect(within(streak as HTMLElement).getByText('0')).toBeInTheDocument();
+    expect(screen.getByText(uk.streakHint)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: uk.addMember })).not.toBeInTheDocument();
     expect(screen.queryByText(uk.pending)).not.toBeInTheDocument();
     expect(fetchMock.mock.calls.some(([url]) => String(url).endsWith('/family/members'))).toBe(

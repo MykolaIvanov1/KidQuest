@@ -21,7 +21,12 @@ export function PointsHistory() {
         </div>
       </div>
       <div className="review-content">
-        <QueryState pending={query.isPending} error={query.error} retry={query.refetch} />
+        <QueryState
+          hasData={query.data !== undefined}
+          pending={query.isPending}
+          error={query.error}
+          retry={query.refetch}
+        />
         {query.data && !query.data.length && (
           <p className="empty-state compact muted">{uk.noPointHistory}</p>
         )}

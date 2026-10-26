@@ -24,10 +24,10 @@ export function taskRoutes(db: PrismaClient, auth: AuthService, storagePath: str
     limits: {
       fileSize: MAX_PHOTO_SIZE,
       files: 5,
-      fields: 1,
+      fields: 3,
       fieldSize: 128,
       fieldNameSize: 64,
-      parts: 7,
+      parts: 9,
     },
     fileFilter: (_req, file, done) => {
       if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype))

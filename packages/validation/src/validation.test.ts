@@ -6,6 +6,9 @@ import {
   registerSchema,
   taskSchema,
   taskUpdateSchema,
+  changeEmailSchema,
+  resetChildPasswordSchema,
+  changeRoleSchema,
 } from './index';
 
 describe('спільна валідація авторизації', () => {
@@ -40,6 +43,43 @@ describe('спільна валідація авторизації', () => {
         role: 'ADMIN',
       }).success,
     ).toBe(false);
+  });
+});
+
+describe('валідація налаштувань акаунта', () => {
+  it('нормалізує email та зберігає точний поточний пароль', () => {
+    expect(
+      changeEmailSchema.parse({ email: ' New@Example.com ', currentPassword: ' secret ' }),
+    ).toEqual({ email: 'new@example.com', currentPassword: ' secret ' });
+  });
+  it('вимагає поточний пароль і захищає поле ролі від підміни', () => {
+    expect(changeRoleSchema.safeParse({ role: 'ADMIN', currentPassword: 'secret' }).success).toBe(
+      false,
+    );
+    expect(changeRoleSchema.safeParse({ role: 'CHILD', currentPassword: '' }).success).toBe(false);
+    expect(
+      changeEmailSchema.safeParse({
+        email: 'a@example.com',
+        currentPassword: 'secret',
+        familyId: 'x',
+      }).success,
+    ).toBe(false);
+  });
+  it('дотримується обмежень нового пароля bcrypt', () => {
+    expect(
+      resetChildPasswordSchema.safeParse({ currentPassword: 'secret', newPassword: 'short' })
+        .success,
+    ).toBe(false);
+    expect(
+      resetChildPasswordSchema.safeParse({ currentPassword: 'secret', newPassword: 'я'.repeat(37) })
+        .success,
+    ).toBe(false);
+    expect(
+      resetChildPasswordSchema.safeParse({
+        currentPassword: 'secret',
+        newPassword: 'Довгий-надійний-пароль',
+      }).success,
+    ).toBe(true);
   });
 });
 

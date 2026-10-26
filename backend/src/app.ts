@@ -17,10 +17,17 @@ import { photoRoutes } from './modules/task-photos/photo.routes.js';
 import { rewardsRoutes } from './modules/rewards/rewards.routes.js';
 import { rewardRequestRoutes } from './modules/reward-requests/reward-requests.routes.js';
 import { pointsRoutes } from './modules/points/points.routes.js';
+import { gamificationRoutes } from './modules/gamification/gamification.routes.js';
+import { notificationRoutes } from './modules/notifications/notification.routes.js';
+import { accountRoutes } from './modules/account/account.routes.js';
+import { aiRoutes } from './modules/ai/ai.routes.js';
+import type { AiOptions } from './modules/ai/ai.types.js';
 
 export interface DomainDependencies {
   database: PrismaClient;
   storagePath: string;
+  pushConfigured?: boolean;
+  ai?: AiOptions;
 }
 
 export function createApp(
@@ -30,6 +37,8 @@ export function createApp(
 ) {
   const app = express();
   app.disable('x-powered-by');
+  // Only the explicitly configured, single internal reverse proxy is trusted.
+  app.set('trust proxy', config.trustProxy ? 1 : false);
   app.use(helmet());
   app.use((_req, res, next) => {
     res.setHeader('Cache-Control', 'no-store');
@@ -70,17 +79,34 @@ export function createApp(
   app.get('/api/v1/health', (_req, res) => {
     res.json({ success: true, data: { status: 'ok' } });
   });
+  if (domain) {
+    app.get('/api/v1/ready', async (_req, res) => {
+      try {
+        await domain.database.$queryRaw`SELECT 1`;
+        res.json({ success: true, data: { status: 'ready' } });
+      } catch {
+        res.status(503).json({
+          success: false,
+          error: { code: 'NOT_READY', message: 'Сервіс тимчасово недоступний.' },
+        });
+      }
+    });
+  }
   const auth = new AuthService(repository, config);
   app.use('/api/v1', createRoutes(auth, config));
   app.use('/api/v1/family', familyRoutes(repository, auth));
   app.use('/api/v1/statistics', statisticsRoutes(repository, auth));
   if (domain) {
+    app.use('/api/v1/account', accountRoutes(domain.database, auth, config));
+    app.use('/api/v1/ai', aiRoutes(domain.database, auth, domain.ai));
     app.use('/api/v1', taskRoutes(domain.database, auth, domain.storagePath));
     app.use('/api/v1', completionRoutes(domain.database, auth, domain.storagePath));
     app.use('/api/v1', photoRoutes(domain.database, auth, domain.storagePath));
     app.use('/api/v1', rewardsRoutes(domain.database, auth));
     app.use('/api/v1', rewardRequestRoutes(domain.database, auth));
     app.use('/api/v1', pointsRoutes(domain.database, auth));
+    app.use('/api/v1', gamificationRoutes(domain.database, auth));
+    app.use('/api/v1', notificationRoutes(domain.database, auth, domain.pushConfigured));
   }
   app.use((_req, _res, next) => {
     next(new AppError(404, 'NOT_FOUND', 'Сторінку не знайдено.'));

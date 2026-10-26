@@ -10,6 +10,8 @@ export default tseslint.config(
       '**/dist/**',
       '**/coverage/**',
       '.local/**',
+      'playwright-report/**',
+      'test-results/**',
       'frontend/public/sw.js',
     ],
   },

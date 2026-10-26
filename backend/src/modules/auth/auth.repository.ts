@@ -2,7 +2,9 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import type { MemberInput, RegisterInput } from '@kidquest/validation';
 import type { DashboardData } from '@kidquest/types';
 import { AppError } from '../../errors/app-error.js';
+import { isRetryableTransactionError } from '../../database/transaction.js';
 import { dateColumn, familyClock, taskForDayWhere } from '../tasks/task-time.js';
+import { GamificationService } from '../gamification/gamification.service.js';
 import {
   publicUser,
   type AuthRepository,
@@ -18,6 +20,7 @@ function mapUser(user: DatabaseUser): UserRecord {
   return {
     ...publicUser(user),
     passwordHash: user.passwordHash,
+    authVersion: user.authVersion,
     isActive: user.isActive,
     deletedAt: user.deletedAt,
     familyDeletedAt: user.family.deletedAt,
@@ -67,14 +70,42 @@ export class PrismaAuthRepository implements AuthRepository {
     }
   }
 
-  async createMember(familyId: string, input: MemberInput, passwordHash: string) {
+  async createMember(
+    familyId: string,
+    input: MemberInput,
+    passwordHash: string,
+    actor?: { id: string; authVersion: number },
+  ) {
     // Serializable isolation prevents two parents simultaneously adding a third parent.
     for (let attempt = 0; attempt < 3; attempt += 1) {
       try {
         return await this.db.$transaction(
           async (tx) => {
-            const family = await tx.family.findFirst({ where: { id: familyId, deletedAt: null } });
-            if (!family) throw new AppError(403, 'FORBIDDEN', 'Сім’я недоступна.');
+            // Role changes use the same lock, so creation and promotion share the parent limit.
+            const family = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
+              SELECT id FROM "Family" WHERE id = ${familyId}::uuid AND "deletedAt" IS NULL
+              FOR UPDATE
+            `);
+            if (!family.length) throw new AppError(403, 'FORBIDDEN', 'Сім’я недоступна.');
+            if (actor) {
+              // Lock the actor too: a Serializable snapshot can predate the family-lock wait.
+              await tx.$queryRaw(Prisma.sql`
+                SELECT id FROM "User" WHERE id = ${actor.id}::uuid FOR UPDATE
+              `);
+              const currentActor = await tx.user.findFirst({
+                where: {
+                  id: actor.id,
+                  familyId,
+                  authVersion: actor.authVersion,
+                  role: 'PARENT',
+                  isActive: true,
+                  deletedAt: null,
+                },
+                select: { id: true },
+              });
+              if (!currentActor)
+                throw new AppError(401, 'UNAUTHENTICATED', 'Увійдіть до свого облікового запису.');
+            }
             if (input.role === 'PARENT') {
               const count = await tx.user.count({
                 where: { familyId, role: 'PARENT', deletedAt: null, isActive: true },
@@ -119,12 +150,10 @@ export class PrismaAuthRepository implements AuthRepository {
           { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
         );
       } catch (error) {
-        if (
-          error instanceof Prisma.PrismaClientKnownRequestError &&
-          error.code === 'P2034' &&
-          attempt < 2
-        )
-          continue;
+        if (isRetryableTransactionError(error)) {
+          if (attempt < 2) continue;
+          throw new AppError(409, 'CONCURRENT_UPDATE', 'Дані змінилися. Повторіть запит.');
+        }
         return conflict(error);
       }
     }
@@ -186,7 +215,11 @@ export class PrismaAuthRepository implements AuthRepository {
       select: { id: true, name: true, timeZone: true },
     });
     const children = await this.db.child.findMany({
-      where: { familyId, deletedAt: null, user: { deletedAt: null, isActive: true } },
+      where: {
+        familyId,
+        deletedAt: null,
+        user: { deletedAt: null, isActive: true, role: 'CHILD' },
+      },
       orderBy: { createdAt: 'asc' },
       select: { id: true, firstName: true, userId: true },
     });
@@ -263,6 +296,7 @@ export class PrismaAuthRepository implements AuthRepository {
           })
         : Promise.resolve(0),
     ]);
+    const gamification = await new GamificationService(this.db).summary(user, child?.id);
     return {
       family,
       child,
@@ -290,7 +324,8 @@ export class PrismaAuthRepository implements AuthRepository {
         type: reward.type,
       })),
       today: { approved, total: child ? taskCount : 0 },
-      streak: null,
+      streak: gamification.streak,
+      gamification,
     };
   }
 }

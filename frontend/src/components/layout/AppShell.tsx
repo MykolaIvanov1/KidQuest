@@ -1,12 +1,15 @@
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import {
   CircleHelp,
+  ChartNoAxesCombined,
   Gift,
   House,
   ListChecks,
   LogOut,
   Map,
+  Settings,
   ShieldCheck,
+  Trophy,
   UserRound,
   WifiOff,
 } from 'lucide-react';
@@ -16,6 +19,8 @@ import { ThemeButton } from '../ui/ThemeButton';
 import { useAuth } from '../../app/providers/AuthProvider';
 import { useOnline } from '../../hooks/useOnline';
 import { uk } from '../../lib/i18n';
+import { NotificationBell } from '../../features/notifications/NotificationBell';
+import { OfflineStatus } from '../../features/offline/OfflineStatus';
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout } = useAuth();
@@ -32,9 +37,25 @@ export function AppShell({ children }: { children: ReactNode }) {
       icon: parent ? ListChecks : Map,
     },
     { to: parent ? '/parent/rewards' : '/child/rewards', label: uk.rewards, icon: Gift },
+    ...(parent
+      ? [
+          { to: '/parent/statistics', label: uk.statistics, icon: ChartNoAxesCombined },
+          { to: '/parent/settings', label: uk.settings, icon: Settings },
+        ]
+      : [
+          { to: '/child/achievements', label: uk.achievements, icon: Trophy },
+          { to: '/child/profile', label: uk.profile, icon: UserRound },
+        ]),
   ];
   const current =
-    navigation.find((item) => item.to === location.pathname)?.label || navigation[0]!.label;
+    navigation.find((item) => item.to === location.pathname)?.label ||
+    (location.pathname.endsWith('/notifications')
+      ? uk.notifications
+      : location.pathname === '/parent/achievements'
+        ? uk.achievements
+        : location.pathname === '/child/calendar'
+          ? uk.calendar
+          : navigation[0]!.label);
   const navLinks = navigation.map(({ to, label, icon: Icon }) => (
     <NavLink
       key={to}
@@ -73,6 +94,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <span className="desktop-label">{current}</span>
           <div className="topbar-actions">
+            <NotificationBell />
             <ThemeButton />
             <span className="topbar-divider" />
             <div className="user-chip">
@@ -105,7 +127,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </header>
         <main id="main-content" className="dashboard">
-          {!online && (
+          {parent && !online && (
             <p className="notice" role="status">
               <WifiOff size={18} />
               {uk.offline}
@@ -116,6 +138,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {error}
             </p>
           )}
+          {!parent && <OfflineStatus />}
           {children}
         </main>
         <footer className="dashboard-footer">
