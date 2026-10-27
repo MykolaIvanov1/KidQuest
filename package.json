@@ -29,7 +29,18 @@
     "test:e2e:install": "node scripts/e2e-install.mjs",
     "backup": "node -- scripts/backup.mjs",
     "setup:production": "node scripts/setup-production-env.mjs",
-    "test:tooling": "node --test scripts/*.test.mjs"
+    "test:tooling": "node --test scripts/*.test.mjs",
+    "mobile:start": "node scripts/mobile-preview.mjs start",
+    "mobile:status": "node scripts/mobile-preview.mjs status",
+    "mobile:stop": "node scripts/mobile-preview.mjs stop",
+    "setup:firebase": "node scripts/setup-firebase.mjs",
+    "mobile:firebase": "node scripts/mobile-preview.mjs firebase",
+    "pc:start": "node scripts/mobile-preview.mjs resume",
+    "pc:status": "node scripts/mobile-preview.mjs status",
+    "pc:stop": "node scripts/mobile-preview.mjs stop",
+    "pc:address": "node scripts/mobile-preview.mjs funnel",
+    "pc:backup": "node scripts/mobile-preview.mjs backup",
+    "pc:startup": "node scripts/pc-startup.mjs"
   },
   "prisma": {
     "schema": "prisma/schema.prisma",
@@ -47,6 +58,7 @@
     "globals": "^16.5.0",
     "prettier": "^3.6.2",
     "prisma": "6.19.0",
+    "qrcode": "^1.5.4",
     "tsx": "^4.20.6",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.46.4"

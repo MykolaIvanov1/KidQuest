@@ -135,6 +135,56 @@ describe('Public PWA shell offline fetch behavior', () => {
     expect(runtime.open).toHaveBeenLastCalledWith(currentCache);
   });
 
+  it.each([503, 504])(
+    'serves the installed shell when a reachable origin proxy returns HTTP %i',
+    async (status) => {
+      const runtime = worker();
+      await runtime.install();
+      runtime.fetch.mockReset().mockResolvedValue(new Response('Origin unavailable', { status }));
+      const navigation = request('/child/adventure', 'navigate');
+      const response = (await runtime.handle(navigation).response())!;
+      expect(response.status).toBe(200);
+      expect(await response.text()).toBe('Public asset /');
+      expect(runtime.fetch).toHaveBeenCalledExactlyOnceWith(navigation);
+      expect(runtime.read(currentCache, '/child/adventure')).toBeUndefined();
+    },
+  );
+
+  it.each([401, 403, 404])(
+    'preserves HTTP %i navigation responses even when a shell is cached',
+    async (status) => {
+      const runtime = worker();
+      await runtime.install();
+      runtime.open.mockClear();
+      const rejected = new Response('Navigation not allowed', { status });
+      runtime.fetch.mockResolvedValueOnce(rejected);
+      const response = (await runtime.handle(request('/child/adventure', 'navigate')).response())!;
+      expect(response).toBe(rejected);
+      expect(response.status).toBe(status);
+      expect(await response.text()).toBe('Navigation not allowed');
+      expect(runtime.open).not.toHaveBeenCalled();
+    },
+  );
+
+  it('preserves the original HTTP 5xx response if no public shell was installed', async () => {
+    const runtime = worker();
+    const unavailable = new Response('Origin unavailable without a saved shell', { status: 503 });
+    runtime.fetch.mockResolvedValueOnce(unavailable);
+    const response = (await runtime.handle(request('/child/adventure', 'navigate')).response())!;
+    expect(response).toBe(unavailable);
+    expect(response.status).toBe(503);
+    expect(await response.text()).toBe('Origin unavailable without a saved shell');
+  });
+
+  it('preserves the original HTTP 5xx response if cache storage cannot be read', async () => {
+    const runtime = worker();
+    const unavailable = new Response('Origin unavailable', { status: 504 });
+    runtime.fetch.mockResolvedValueOnce(unavailable);
+    runtime.open.mockRejectedValueOnce(new Error('Cache storage unavailable'));
+    expect(await runtime.handle(request('/child/adventure', 'navigate')).response()).toBe(
+      unavailable,
+    );
+  });
   it('uses the network document when navigation succeeds without caching private page HTML', async () => {
     const runtime = worker();
     const navigation = request('/child/profile', 'navigate');

@@ -27,8 +27,18 @@ self.addEventListener('fetch', (event) => {
   )
     return;
   if (event.request.mode === 'navigate') {
+    const cachedShell = () => caches.open(CACHE).then((cache) => cache.match('/'));
     event.respondWith(
-      fetch(event.request).catch(() => caches.open(CACHE).then((cache) => cache.match('/'))),
+      fetch(event.request)
+        .then((response) => {
+          if (response.status < 500 || response.status >= 600) return response;
+          // A reachable edge proxy can report an unavailable origin as HTTP 5xx.
+          return cachedShell().then(
+            (cached) => cached || response,
+            () => response,
+          );
+        })
+        .catch(cachedShell),
     );
     return;
   }
